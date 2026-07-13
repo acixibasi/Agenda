@@ -22,6 +22,51 @@ const STATUS_LABELS = {
   onvolledig: "Onvolledig"
 };
 
+const PERSON_LABELS = {
+  persoon_jij: "Jij",
+  persoon_vrouw: "Vrouw"
+};
+
+const SERVICE_TYPES = [
+  "vroeg",
+  "dag",
+  "laat",
+  "nacht",
+  "vrij",
+  "opleiding",
+  "instructie",
+  "overig"
+];
+
+const SERVICE_STATUSES = [
+  "wens",
+  "aangevraagd",
+  "optie",
+  "voorgesteld",
+  "onzeker",
+  "waarschijnlijk",
+  "bevestigd",
+  "gepubliceerd",
+  "ruil_gewenst"
+];
+
+const FAMILY_BLOCK_TYPES = [
+  "school_brengen",
+  "school_halen",
+  "opvang",
+  "sport",
+  "afspraak",
+  "overig"
+];
+
+const WISH_TYPES = [
+  "liever_geen_dienst",
+  "liefst_vrij",
+  "voorkeur_dienst",
+  "samen_vrij",
+  "overig"
+];
+
 const MONTH_NAMES = [
   "Januari",
   "Februari",
@@ -221,6 +266,7 @@ function renderApp() {
   document.getElementById("app-version").textContent = `Appversie ${APP_VERSION}`;
   renderMonthOverview();
   renderMonthCockpit();
+  renderQuickEntry();
   renderActionList();
   renderStoragePanel();
 }
@@ -294,6 +340,7 @@ function renderMonthCockpit() {
       </div>
       <div class="toolbar">
         <button type="button" class="subtle-button" data-view-target="months">Terug</button>
+        <button type="button" data-view-target="quick-entry">Snelle invoer</button>
       </div>
     </div>
 
@@ -330,13 +377,13 @@ function renderDayRow(day) {
         ${hasItems ? `
           <div class="item-list">
             ${day.services.map((service) => `
-              <span class="mini-item">${escapeHtml(service.persoonId || "Persoon")} ${escapeHtml(service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
+              <span class="mini-item">${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
             `).join("")}
             ${day.familyBlocks.map((block) => `
-              <span class="mini-item">${escapeHtml(block.type || "Gezin")} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+              <span class="mini-item">${escapeHtml(formatCodeLabel(block.type || "Gezin"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
             `).join("")}
             ${day.wishes.map((wish) => `
-              <span class="mini-item">Wens: ${escapeHtml(wish.type || "wens")}</span>
+              <span class="mini-item">Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>
             `).join("")}
           </div>
         ` : "<span class=\"mini-item\">Geen items</span>"}
@@ -360,9 +407,167 @@ function renderActionCard(action) {
   return `
     <article class="action-card">
       <h3>${escapeHtml(action.titel || "Actie")}</h3>
-      <p>${escapeHtml(action.type || "actie")} · ${escapeHtml(action.prioriteit || "normaal")} · ${escapeHtml(action.status || "open")}</p>
+      <p>${escapeHtml(action.type || "actie")} - ${escapeHtml(action.prioriteit || "normaal")} - ${escapeHtml(action.status || "open")}</p>
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
     </article>
+  `;
+}
+
+function renderQuickEntry() {
+  const content = document.getElementById("quick-entry-content");
+  const activeMonthId = state.data.instellingen.actieveMaandId;
+  const month = activeMonthId ? getMonth(activeMonthId) : null;
+
+  if (!month) {
+    content.innerHTML = `
+      <div class="empty-state">
+        Open eerst een maand. Daarna kun je diensten, gezinsverplichtingen en wensen toevoegen.
+      </div>
+    `;
+    return;
+  }
+
+  const lastDay = String(new Date(month.jaar, month.maand, 0).getDate()).padStart(2, "0");
+  const minDate = `${month.id}-01`;
+  const maxDate = `${month.id}-${lastDay}`;
+
+  content.innerHTML = `
+    <div class="stack">
+      <section class="panel">
+        <p class="eyebrow">Actieve maand</p>
+        <h3 class="form-section-title">${escapeHtml(getMonthLabel(month.id))}</h3>
+        <div class="toolbar">
+          <button type="button" class="subtle-button" data-view-target="cockpit">Terug naar cockpit</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h3 class="form-section-title">Dienst toevoegen</h3>
+        <form id="service-form" class="form-grid">
+          <label>
+            Persoon
+            <select name="persoonId" required>
+              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS)}
+            </select>
+          </label>
+          <label>
+            Datum
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+          </label>
+          <label>
+            Start
+            <input name="start" type="time" required>
+          </label>
+          <label>
+            Einde
+            <input name="einde" type="time" required>
+          </label>
+          <label>
+            Diensttype
+            <select name="dienstType" required>
+              ${renderOptions(SERVICE_TYPES)}
+            </select>
+          </label>
+          <label>
+            Status
+            <select name="status" required>
+              ${renderOptions(SERVICE_STATUSES, null, "gepubliceerd")}
+            </select>
+          </label>
+          <label>
+            Dienstcode
+            <input name="dienstCode" type="text" placeholder="Bijv. C, D, L">
+          </label>
+          <label>
+            Locatie
+            <input name="locatie" type="text" placeholder="Bijv. Zuid">
+          </label>
+          <label class="full-width">
+            Opmerking
+            <textarea name="opmerking" placeholder="Korte notitie"></textarea>
+          </label>
+          <button type="submit">Dienst opslaan</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h3 class="form-section-title">Gezinsverplichting toevoegen</h3>
+        <form id="family-block-form" class="form-grid">
+          <label>
+            Type
+            <select name="type" required>
+              ${renderOptions(FAMILY_BLOCK_TYPES)}
+            </select>
+          </label>
+          <label>
+            Datum
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+          </label>
+          <label>
+            Start
+            <input name="start" type="time" required>
+          </label>
+          <label>
+            Einde
+            <input name="einde" type="time" required>
+          </label>
+          <label>
+            Hardheid
+            <select name="hardheid" required>
+              <option value="hard">Hard</option>
+              <option value="zacht">Zacht</option>
+            </select>
+          </label>
+          <label>
+            Dekking nodig
+            <select name="dekkingNodig" required>
+              <option value="true">Ja</option>
+              <option value="false">Nee</option>
+            </select>
+          </label>
+          <label class="full-width">
+            Opmerking
+            <textarea name="opmerking" placeholder="Bijv. school uit, opvang dicht"></textarea>
+          </label>
+          <button type="submit">Gezinsitem opslaan</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h3 class="form-section-title">Wens toevoegen</h3>
+        <form id="wish-form" class="form-grid">
+          <label>
+            Persoon
+            <select name="persoonId" required>
+              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS)}
+            </select>
+          </label>
+          <label>
+            Datum
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+          </label>
+          <label>
+            Type
+            <select name="type" required>
+              ${renderOptions(WISH_TYPES)}
+            </select>
+          </label>
+          <label>
+            Prioriteit
+            <select name="prioriteit" required>
+              <option value="hoog">Hoog</option>
+              <option value="normaal">Normaal</option>
+              <option value="laag">Laag</option>
+            </select>
+          </label>
+          <label class="full-width">
+            Reden
+            <textarea name="reden" placeholder="Waarom is deze wens belangrijk?"></textarea>
+          </label>
+          <button type="submit">Wens opslaan</button>
+        </form>
+      </section>
+    </div>
   `;
 }
 

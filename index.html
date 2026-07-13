@@ -22,6 +22,7 @@
     <nav class="view-nav" aria-label="Hoofdweergaven">
       <button type="button" class="nav-button active" data-view="months">Maanden</button>
       <button type="button" class="nav-button" data-view="cockpit">Cockpit</button>
+      <button type="button" class="nav-button" data-view="quick-entry">Invoer</button>
       <button type="button" class="nav-button" data-view="actions">Acties</button>
       <button type="button" class="nav-button" data-view="backup">Opslag</button>
     </nav>
@@ -56,6 +57,16 @@
 
       <section id="view-cockpit" class="view" aria-labelledby="cockpit-title">
         <div id="cockpit-content"></div>
+      </section>
+
+      <section id="view-quick-entry" class="view" aria-labelledby="quick-entry-title">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Snelle invoer</p>
+            <h2 id="quick-entry-title">Roosterdata toevoegen</h2>
+          </div>
+        </div>
+        <div id="quick-entry-content"></div>
       </section>
 
       <section id="view-actions" class="view" aria-labelledby="actions-title">
