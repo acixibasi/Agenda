@@ -23,6 +23,7 @@ jobs:
           SFTP_USER: ${{ secrets.SFTP_USER }}
           SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
           SFTP_REMOTE_DIR: ${{ secrets.SFTP_REMOTE_DIR }}
+          SFTP_PORT: ${{ secrets.SFTP_PORT || '22' }}
         run: |
           set -euo pipefail
 
@@ -31,11 +32,19 @@ jobs:
             exit 1
           fi
 
-          sshpass -p "${SFTP_PASSWORD}" sftp \
+          export SSHPASS="${SFTP_PASSWORD}"
+
+          echo "Starting SFTP upload to configured webserver."
+          echo "Remote directory: ${SFTP_REMOTE_DIR}"
+
+          sshpass -e sftp \
             -oBatchMode=no \
+            -oPreferredAuthentications=password \
+            -oPubkeyAuthentication=no \
             -oStrictHostKeyChecking=accept-new \
+            -P "${SFTP_PORT}" \
             "${SFTP_USER}@${SFTP_HOST}" <<SFTP_COMMANDS
-          mkdir ${SFTP_REMOTE_DIR}
+          -mkdir ${SFTP_REMOTE_DIR}
           cd ${SFTP_REMOTE_DIR}
           put -r docs
           bye
