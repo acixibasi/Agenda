@@ -1,0 +1,42 @@
+name: Deploy to webserver
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install SFTP helper
+        run: sudo apt-get update && sudo apt-get install -y sshpass
+
+      - name: Upload docs to webserver
+        env:
+          SFTP_HOST: ${{ secrets.SFTP_HOST }}
+          SFTP_USER: ${{ secrets.SFTP_USER }}
+          SFTP_PASSWORD: ${{ secrets.SFTP_PASSWORD }}
+          SFTP_REMOTE_DIR: ${{ secrets.SFTP_REMOTE_DIR }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SFTP_HOST}" ] || [ -z "${SFTP_USER}" ] || [ -z "${SFTP_PASSWORD}" ] || [ -z "${SFTP_REMOTE_DIR}" ]; then
+            echo "Missing one or more required GitHub Secrets."
+            exit 1
+          fi
+
+          sshpass -p "${SFTP_PASSWORD}" sftp \
+            -oBatchMode=no \
+            -oStrictHostKeyChecking=accept-new \
+            "${SFTP_USER}@${SFTP_HOST}" <<SFTP_COMMANDS
+          mkdir ${SFTP_REMOTE_DIR}
+          cd ${SFTP_REMOTE_DIR}
+          put -r docs
+          bye
+          SFTP_COMMANDS
