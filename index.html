@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Roostercoach</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Lokale roostercoach</p>
+        <h1>Roostercoach</h1>
+      </div>
+      <div class="app-meta">
+        <span id="app-version">Versie</span>
+        <span id="save-status" class="save-status">Alleen lokaal</span>
+      </div>
+    </header>
+
+    <nav class="view-nav" aria-label="Hoofdweergaven">
+      <button type="button" class="nav-button active" data-view="months">Maanden</button>
+      <button type="button" class="nav-button" data-view="cockpit">Cockpit</button>
+      <button type="button" class="nav-button" data-view="actions">Acties</button>
+      <button type="button" class="nav-button" data-view="backup">Opslag</button>
+    </nav>
+
+    <main>
+      <section id="view-months" class="view active" aria-labelledby="months-title">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Maandoverzicht</p>
+            <h2 id="months-title">Alle maanden</h2>
+          </div>
+        </div>
+
+        <form id="create-month-form" class="inline-form">
+          <label>
+            Jaar
+            <input id="month-year" name="year" type="number" min="2020" max="2100" required>
+          </label>
+          <label>
+            Maand
+            <select id="month-number" name="month" required></select>
+          </label>
+          <label>
+            Ronde
+            <select id="month-stage" name="stage" required></select>
+          </label>
+          <button type="submit">Maand aanmaken</button>
+        </form>
+
+        <div id="month-list" class="month-grid"></div>
+      </section>
+
+      <section id="view-cockpit" class="view" aria-labelledby="cockpit-title">
+        <div id="cockpit-content"></div>
+      </section>
+
+      <section id="view-actions" class="view" aria-labelledby="actions-title">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Werkvoorraad</p>
+            <h2 id="actions-title">Acties</h2>
+          </div>
+        </div>
+        <div id="action-list" class="stack"></div>
+      </section>
+
+      <section id="view-backup" class="view" aria-labelledby="backup-title">
+        <div class="section-header">
+          <div>
+            <p class="eyebrow">Lokale opslag</p>
+            <h2 id="backup-title">Opslagstatus</h2>
+          </div>
+        </div>
+        <div id="storage-panel" class="panel"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

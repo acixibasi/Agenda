@@ -17,7 +17,7 @@ jobs:
       - name: Install SFTP helper
         run: sudo apt-get update && sudo apt-get install -y sshpass
 
-      - name: Upload docs to webserver
+      - name: Upload site to webserver
         env:
           SFTP_HOST: ${{ secrets.SFTP_HOST }}
           SFTP_USER: ${{ secrets.SFTP_USER }}
@@ -43,9 +43,12 @@ jobs:
             -oPubkeyAuthentication=no \
             -oStrictHostKeyChecking=accept-new \
             -P "${SFTP_PORT}" \
-            "${SFTP_USER}@${SFTP_HOST}" <<SFTP_COMMANDS
+          "${SFTP_USER}@${SFTP_HOST}" <<SFTP_COMMANDS
           -mkdir ${SFTP_REMOTE_DIR}
           cd ${SFTP_REMOTE_DIR}
+          put index.html
+          put style.css
+          put app.js
           put -r docs
           bye
           SFTP_COMMANDS
