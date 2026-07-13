@@ -342,6 +342,26 @@ textarea {
   font-size: 0.9rem;
 }
 
+.day-row-signal {
+  border-color: #f0c36d;
+}
+
+.signal-conflict,
+.signal-blokkade {
+  border-color: #e38b8b;
+  background: var(--conflict);
+  color: var(--conflict-text);
+  font-weight: 700;
+}
+
+.signal-aandacht,
+.signal-waarschuwing {
+  border-color: #f0c36d;
+  background: var(--attention);
+  color: var(--attention-text);
+  font-weight: 700;
+}
+
 .empty-state {
   color: var(--muted);
   box-shadow: none;

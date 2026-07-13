@@ -22,6 +22,13 @@ const STATUS_LABELS = {
   onvolledig: "Onvolledig"
 };
 
+const ACTION_PRIORITY_ORDER = {
+  urgent: 0,
+  hoog: 1,
+  normaal: 2,
+  laag: 3
+};
+
 const PERSON_LABELS = {
   persoon_jij: "Jij",
   persoon_vrouw: "Vrouw"
@@ -158,6 +165,7 @@ function loadData() {
 
   try {
     state.data = normalizeData(JSON.parse(stored));
+    state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
   } catch (error) {
     console.error("Kon lokale data niet lezen", error);
     state.data = createEmptyData();
@@ -244,6 +252,19 @@ function getOpenActions(monthId) {
     const inMonth = !monthId || action.maandPlanningId === monthId;
     const isOpen = !["opgelost", "genegeerd", "vervallen"].includes(action.status);
     return inMonth && isOpen;
+  }).sort(sortActions);
+}
+
+function sortActions(a, b) {
+  const priorityDiff = (ACTION_PRIORITY_ORDER[a.prioriteit] ?? 9) - (ACTION_PRIORITY_ORDER[b.prioriteit] ?? 9);
+  if (priorityDiff !== 0) return priorityDiff;
+  return String(a.deadline || "").localeCompare(String(b.deadline || ""));
+}
+
+function getVisibleAnalyses(monthId) {
+  return state.data.analyseResultaten.filter((result) => {
+    const inMonth = !monthId || result.maandPlanningId === monthId;
+    return inMonth && result.actieStatus !== "vervallen";
   });
 }
 
@@ -323,6 +344,7 @@ function renderMonthCockpit() {
 
   const services = getMonthItems(month.id, "diensten");
   const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
+  const analyses = getVisibleAnalyses(month.id);
   const actions = getOpenActions(month.id);
   const days = buildMonthDays(month);
 
@@ -356,6 +378,7 @@ function renderMonthCockpit() {
           <div class="storage-row"><span>Diensten</span><strong>${services.length}</strong></div>
           <div class="storage-row"><span>Gezinsverplichtingen</span><strong>${familyBlocks.length}</strong></div>
           <div class="storage-row"><span>Wensen</span><strong>${getMonthItems(month.id, "wensen").length}</strong></div>
+          <div class="storage-row"><span>Analysepunten</span><strong>${analyses.length}</strong></div>
         </div>
       </section>
 
@@ -368,13 +391,14 @@ function renderMonthCockpit() {
 
 function renderDayRow(day) {
   const hasItems = day.services.length || day.familyBlocks.length || day.wishes.length;
+  const hasSignals = day.analyses.length || day.actions.length;
   return `
-    <article class="day-row">
+    <article class="day-row ${hasSignals ? "day-row-signal" : ""}">
       <div>
         <div class="day-date">${escapeHtml(formatLongDate(day.date))}</div>
       </div>
       <div>
-        ${hasItems ? `
+        ${hasItems || hasSignals ? `
           <div class="item-list">
             ${day.services.map((service) => `
               <span class="mini-item">${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
@@ -384,6 +408,9 @@ function renderDayRow(day) {
             `).join("")}
             ${day.wishes.map((wish) => `
               <span class="mini-item">Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>
+            `).join("")}
+            ${day.analyses.map((result) => `
+              <span class="mini-item signal-${escapeHtml(result.ernst)}">${escapeHtml(formatCodeLabel(result.ernst))}: ${escapeHtml(result.melding)}</span>
             `).join("")}
           </div>
         ` : "<span class=\"mini-item\">Geen items</span>"}
@@ -408,6 +435,8 @@ function renderActionCard(action) {
     <article class="action-card">
       <h3>${escapeHtml(action.titel || "Actie")}</h3>
       <p>${escapeHtml(action.type || "actie")} - ${escapeHtml(action.prioriteit || "normaal")} - ${escapeHtml(action.status || "open")}</p>
+      ${action.deadline ? `<p>Deadline: ${escapeHtml(formatLongDate(action.deadline))}</p>` : ""}
+      ${action.advies ? `<p>${escapeHtml(action.advies)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
     </article>
   `;
@@ -594,6 +623,8 @@ function buildMonthDays(month) {
   const services = getMonthItems(month.id, "diensten");
   const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
   const wishes = getMonthItems(month.id, "wensen");
+  const analyses = getVisibleAnalyses(month.id);
+  const actions = getOpenActions(month.id);
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = index + 1;
@@ -602,9 +633,262 @@ function buildMonthDays(month) {
       date,
       services: services.filter((item) => item.datum === date),
       familyBlocks: familyBlocks.filter((item) => item.datum === date),
-      wishes: wishes.filter((item) => item.datum === date)
+      wishes: wishes.filter((item) => item.datum === date),
+      analyses: analyses.filter((item) => item.datum === date),
+      actions: actions.filter((item) => item.datum === date || item.deadline === date)
     };
   });
+}
+
+function addService(input) {
+  const monthId = dateToMonthId(input.datum);
+  const service = {
+    id: generateId("dienst"),
+    persoonId: input.persoonId,
+    maandPlanningId: monthId,
+    datum: input.datum,
+    start: input.start,
+    einde: input.einde,
+    dienstCode: input.dienstCode.trim(),
+    dienstType: input.dienstType,
+    locatie: input.locatie.trim(),
+    roosterLaag: input.dienstType === "instructie" ? "instructie" : "regulier",
+    status: input.status,
+    bronId: "bron_handmatig",
+    ruilbaar: "onbekend",
+    opmerking: input.opmerking.trim()
+  };
+
+  state.data.diensten.push(service);
+  runAnalysis(monthId);
+  saveData("dienst_toegevoegd");
+  showView("cockpit");
+}
+
+function addFamilyBlock(input) {
+  const monthId = dateToMonthId(input.datum);
+  const familyBlock = {
+    id: generateId("gezin"),
+    maandPlanningId: monthId,
+    type: input.type,
+    kindId: "",
+    datum: input.datum,
+    start: input.start,
+    einde: input.einde,
+    hardheid: input.hardheid,
+    dekkingNodig: input.dekkingNodig === "true",
+    opmerking: input.opmerking.trim()
+  };
+
+  state.data.gezinsVerplichtingen.push(familyBlock);
+  runAnalysis(monthId);
+  saveData("gezinsverplichting_toegevoegd");
+  showView("cockpit");
+}
+
+function addWish(input) {
+  const monthId = dateToMonthId(input.datum);
+  const wish = {
+    id: generateId("wens"),
+    persoonId: input.persoonId,
+    maandPlanningId: monthId,
+    type: input.type,
+    datum: input.datum,
+    dienstType: "",
+    prioriteit: input.prioriteit,
+    reden: input.reden.trim()
+  };
+
+  state.data.wensen.push(wish);
+  runAnalysis(monthId);
+  saveData("wens_toegevoegd");
+  showView("cockpit");
+}
+
+function runAnalysis(monthId) {
+  const context = buildAnalysisContext(monthId);
+  clearGeneratedAnalysis(monthId);
+
+  const results = [
+    ...checkMissingCoverage(context),
+    ...checkBothParentsBusy(context)
+  ];
+
+  state.data.analyseResultaten.push(...results);
+  syncActionsWithAnalysis(monthId, results);
+  updateMonthStatus(monthId);
+}
+
+function buildAnalysisContext(monthId) {
+  return {
+    monthId,
+    month: getMonth(monthId),
+    services: getMonthItems(monthId, "diensten"),
+    familyBlocks: getMonthItems(monthId, "gezinsVerplichtingen"),
+    analyses: getMonthItems(monthId, "analyseResultaten"),
+    actions: getMonthItems(monthId, "actieItems")
+  };
+}
+
+function clearGeneratedAnalysis(monthId) {
+  state.data.analyseResultaten = state.data.analyseResultaten.filter((result) => {
+    return result.maandPlanningId !== monthId || !result.generated;
+  });
+}
+
+function checkMissingCoverage(context) {
+  const results = [];
+  context.familyBlocks
+    .filter((block) => block.dekkingNodig)
+    .forEach((block) => {
+      const overlappingServices = context.services.filter((service) => {
+        return service.datum === block.datum && timesOverlap(service.start, service.einde, block.start, block.einde);
+      });
+      const busyParents = new Set(overlappingServices.map((service) => service.persoonId));
+      const bothParentsBusy = busyParents.has("persoon_jij") && busyParents.has("persoon_vrouw");
+
+      if (!bothParentsBusy) return;
+
+      results.push(createAnalysisResult({
+        monthId: context.monthId,
+        datum: block.datum,
+        ernst: "conflict",
+        categorie: "gezin",
+        regelId: "regel_kinddekking",
+        betrokkenDienstIds: overlappingServices.map((service) => service.id),
+        betrokkenGezinsVerplichtingId: block.id,
+        melding: `${formatCodeLabel(block.type)} op ${formatLongDate(block.datum)} is ongedekt`,
+        advies: "Zoek ruil, regel opvang of pas een dienst aan.",
+        signature: `kinddekking_${block.id}`
+      }));
+    });
+
+  return results;
+}
+
+function checkBothParentsBusy(context) {
+  const results = [];
+  const servicesByDate = groupBy(context.services, "datum");
+
+  Object.entries(servicesByDate).forEach(([date, services]) => {
+    const jijServices = services.filter((service) => service.persoonId === "persoon_jij");
+    const vrouwServices = services.filter((service) => service.persoonId === "persoon_vrouw");
+
+    jijServices.forEach((jijService) => {
+      vrouwServices.forEach((vrouwService) => {
+        if (!timesOverlap(jijService.start, jijService.einde, vrouwService.start, vrouwService.einde)) return;
+
+        const hasCoverageConflict = context.familyBlocks.some((block) => {
+          return block.dekkingNodig &&
+            block.datum === date &&
+            timesOverlap(jijService.start, jijService.einde, block.start, block.einde) &&
+            timesOverlap(vrouwService.start, vrouwService.einde, block.start, block.einde);
+        });
+
+        if (hasCoverageConflict) return;
+
+        results.push(createAnalysisResult({
+          monthId: context.monthId,
+          datum: date,
+          ernst: "aandacht",
+          categorie: "gezin",
+          regelId: "regel_beide_ouders_bezet",
+          betrokkenDienstIds: [jijService.id, vrouwService.id],
+          betrokkenGezinsVerplichtingId: "",
+          melding: `Beide ouders werken tegelijk op ${formatLongDate(date)}`,
+          advies: "Controleer of er op dat moment geen gezinsdekking nodig is.",
+          signature: `beide_ouders_${jijService.id}_${vrouwService.id}`
+        }));
+      });
+    });
+  });
+
+  return results;
+}
+
+function createAnalysisResult(input) {
+  return {
+    id: generateId("analyse"),
+    maandPlanningId: input.monthId,
+    datum: input.datum,
+    ernst: input.ernst,
+    categorie: input.categorie,
+    regelId: input.regelId,
+    betrokkenDienstIds: input.betrokkenDienstIds,
+    betrokkenGezinsVerplichtingId: input.betrokkenGezinsVerplichtingId,
+    melding: input.melding,
+    advies: input.advies,
+    actieStatus: "open",
+    signature: input.signature,
+    generated: true
+  };
+}
+
+function syncActionsWithAnalysis(monthId, results) {
+  const activeSignatures = new Set(results.map((result) => result.signature));
+
+  state.data.actieItems.forEach((action) => {
+    if (action.maandPlanningId !== monthId || !action.generated) return;
+    if (!activeSignatures.has(action.analyseSignature) && !["opgelost", "genegeerd"].includes(action.status)) {
+      action.status = "vervallen";
+    }
+  });
+
+  results
+    .filter((result) => ["conflict", "waarschuwing", "keuze_nodig"].includes(result.ernst))
+    .forEach((result) => createOrUpdateAction(result));
+}
+
+function createOrUpdateAction(result) {
+  const existing = state.data.actieItems.find((action) => {
+    return action.generated && action.analyseSignature === result.signature;
+  });
+  const title = result.ernst === "conflict" ? result.melding : `Controleer: ${result.melding}`;
+  const patch = {
+    maandPlanningId: result.maandPlanningId,
+    datum: result.datum,
+    titel: title,
+    type: result.categorie === "gezin" ? "opvang_regelen" : "controleren",
+    prioriteit: result.ernst === "conflict" ? "hoog" : "normaal",
+    deadline: result.datum,
+    gekoppeldeAnalyseIds: [result.id],
+    advies: result.advies,
+    analyseSignature: result.signature,
+    generated: true
+  };
+
+  if (existing) {
+    Object.assign(existing, patch);
+    if (existing.status === "vervallen") existing.status = "open";
+    return existing;
+  }
+
+  const action = {
+    id: generateId("actie"),
+    status: "open",
+    ...patch
+  };
+  state.data.actieItems.push(action);
+  return action;
+}
+
+function updateMonthStatus(monthId) {
+  const month = getMonth(monthId);
+  if (!month) return;
+  const openActions = getOpenActions(monthId);
+  const analyses = getVisibleAnalyses(monthId);
+  const services = getMonthItems(monthId, "diensten");
+
+  month.laatstBijgewerkt = new Date().toISOString();
+  if (openActions.some((action) => action.prioriteit === "hoog")) {
+    month.samenvattingStatus = "conflict";
+  } else if (analyses.length) {
+    month.samenvattingStatus = "aandacht";
+  } else if (!services.length) {
+    month.samenvattingStatus = "onvolledig";
+  } else {
+    month.samenvattingStatus = "goed";
+  }
 }
 
 function populateForms() {
@@ -648,6 +932,23 @@ function bindEvents() {
     const form = new FormData(event.currentTarget);
     createMonth(form.get("year"), form.get("month"), form.get("stage"));
   });
+
+  document.addEventListener("submit", (event) => {
+    if (event.target.id === "service-form") {
+      event.preventDefault();
+      addService(formToObject(event.target));
+    }
+
+    if (event.target.id === "family-block-form") {
+      event.preventDefault();
+      addFamilyBlock(formToObject(event.target));
+    }
+
+    if (event.target.id === "wish-form") {
+      event.preventDefault();
+      addWish(formToObject(event.target));
+    }
+  });
 }
 
 function setSaveStatus(message, isError = false) {
@@ -659,6 +960,32 @@ function setSaveStatus(message, isError = false) {
 
 function generateId(prefix) {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function dateToMonthId(date) {
+  return String(date || "").slice(0, 7);
+}
+
+function formToObject(form) {
+  return Object.fromEntries(new FormData(form).entries());
+}
+
+function getPersonLabel(personId) {
+  return PERSON_LABELS[personId] || personId || "Persoon";
+}
+
+function renderOptions(values, labels = null, selectedValue = "") {
+  return values.map((value) => {
+    const label = labels ? labels[value] : formatCodeLabel(value);
+    const selected = value === selectedValue ? " selected" : "";
+    return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+function formatCodeLabel(value) {
+  return String(value || "")
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatDateTime(value) {
@@ -687,6 +1014,35 @@ function formatLongDate(value) {
 function formatTimeRange(start, end) {
   if (!start && !end) return "";
   return `${start || "?"}-${end || "?"}`;
+}
+
+function timesOverlap(aStart, aEnd, bStart, bEnd) {
+  const aStartMinutes = timeToMinutes(aStart);
+  const aEndMinutes = timeToMinutes(aEnd);
+  const bStartMinutes = timeToMinutes(bStart);
+  const bEndMinutes = timeToMinutes(bEnd);
+
+  if ([aStartMinutes, aEndMinutes, bStartMinutes, bEndMinutes].some((value) => value === null)) {
+    return false;
+  }
+
+  return aStartMinutes < bEndMinutes && bStartMinutes < aEndMinutes;
+}
+
+function timeToMinutes(value) {
+  if (!value || !value.includes(":")) return null;
+  const [hours, minutes] = value.split(":").map(Number);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return (hours * 60) + minutes;
+}
+
+function groupBy(items, key) {
+  return items.reduce((groups, item) => {
+    const groupKey = item[key] || "";
+    if (!groups[groupKey]) groups[groupKey] = [];
+    groups[groupKey].push(item);
+    return groups;
+  }, {});
 }
 
 function escapeHtml(value) {
