@@ -374,6 +374,129 @@ textarea {
   margin: 0;
 }
 
+.control-center {
+  border-left: 5px solid var(--brand);
+}
+
+.control-conflict {
+  border-left-color: var(--conflict-text);
+}
+
+.control-aandacht {
+  border-left-color: var(--attention-text);
+}
+
+.control-onvolledig {
+  border-left-color: var(--incomplete-text);
+}
+
+.control-goed {
+  border-left-color: var(--good-text);
+}
+
+.control-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.control-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.control-score-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 14px;
+}
+
+.control-score {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  min-height: 74px;
+  padding: 10px;
+}
+
+.control-score span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.control-score strong {
+  font-size: 1.5rem;
+}
+
+.control-score-conflict {
+  background: var(--conflict);
+  color: var(--conflict-text);
+}
+
+.control-score-attention {
+  background: var(--attention);
+  color: var(--attention-text);
+}
+
+.control-score-incomplete {
+  background: var(--incomplete);
+  color: var(--incomplete-text);
+}
+
+.control-score-good {
+  background: var(--good);
+  color: var(--good-text);
+}
+
+.control-columns {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.control-section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.control-section h4 {
+  margin: 0;
+}
+
+.control-finding {
+  background: #f9fafb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.link-button {
+  min-height: auto;
+  width: fit-content;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  padding: 0;
+  text-align: left;
+}
+
+.link-button:hover {
+  background: transparent;
+  color: var(--brand-dark);
+  text-decoration: underline;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }
@@ -609,6 +732,15 @@ textarea {
   }
 
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .control-header {
+    flex-direction: column;
+  }
+
+  .control-score-grid,
+  .control-columns {
     grid-template-columns: 1fr;
   }
 

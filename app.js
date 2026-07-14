@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.8-lokaal";
+const APP_VERSION = "0.1.9-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -226,6 +226,7 @@ function createMonth(year, month, planningStage) {
   state.data.instellingen.actieveMaandId = monthId;
   state.quickEntry = null;
   state.selectedDate = `${monthId}-01`;
+  runAnalysis(monthId);
   saveData("maand_aangemaakt");
   showView("cockpit");
   return monthPlanning;
@@ -497,6 +498,7 @@ function renderMonthCockpit() {
   const closedActions = getClosedActions(month.id);
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
+  const controlSummary = buildControlSummary(month, days);
 
   content.innerHTML = `
     <div class="cockpit-header">
@@ -519,6 +521,8 @@ function renderMonthCockpit() {
     </div>
 
     <div class="stack">
+      ${renderControlCenter(controlSummary)}
+
       <section class="panel">
         <p class="eyebrow">Actiestrook</p>
         ${actions.length ? actions.map(renderActionCard).join("") : "<p>Geen open acties voor deze maand.</p>"}
@@ -545,6 +549,115 @@ function renderMonthCockpit() {
       <section class="stack">
         ${days.map(renderDayRow).join("")}
       </section>
+    </div>
+  `;
+}
+
+function buildControlSummary(month, days) {
+  const analyses = getVisibleAnalyses(month.id);
+  const openActions = getOpenActions(month.id);
+  const conflicts = analyses.filter((item) => item.ernst === "conflict");
+  const checks = analyses.filter((item) => ["aandacht", "waarschuwing", "keuze_nodig"].includes(item.ernst));
+  const incomplete = analyses.filter((item) => item.ernst === "onvolledig");
+  const okDays = days.filter((day) => {
+    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
+    const hasProblem = day.analyses.length || day.actions.length;
+    return hasContent && !hasProblem;
+  });
+  const oordeel = getHardAdviceLabel({ conflicts, checks, incomplete, openActions, month });
+
+  return {
+    month,
+    oordeel,
+    conflicts,
+    checks,
+    incomplete,
+    openActions,
+    okDays,
+    checkedAt: month.laatstBijgewerkt
+  };
+}
+
+function getHardAdviceLabel(summary) {
+  if (summary.conflicts.length) return "Actie nodig";
+  if (summary.incomplete.length) return "Invoer aanvullen";
+  if (summary.checks.length || summary.openActions.length) return "Controleer";
+  if (summary.month.samenvattingStatus === "goed") return "Kan blijven staan";
+  return "Controle beperkt";
+}
+
+function renderControlCenter(summary) {
+  return `
+    <section class="panel control-center control-${escapeHtml(summary.month.samenvattingStatus)}">
+      <div class="control-header">
+        <div>
+          <p class="eyebrow">Controlecentrum</p>
+          <h3 class="form-section-title">${escapeHtml(summary.oordeel)}</h3>
+          <p class="control-meta">Laatste controle: ${escapeHtml(formatDateTime(summary.checkedAt))}</p>
+        </div>
+        <div class="toolbar">
+          <button type="button" data-run-analysis="${escapeHtml(summary.month.id)}">Controle opnieuw uitvoeren</button>
+        </div>
+      </div>
+
+      <div class="control-score-grid">
+        ${renderControlScore("Conflicten", summary.conflicts.length, "conflict")}
+        ${renderControlScore("Te controleren", summary.checks.length, "attention")}
+        ${renderControlScore("Onvolledig", summary.incomplete.length, "incomplete")}
+        ${renderControlScore("Open acties", summary.openActions.length, "actions")}
+        ${renderControlScore("Geen probleem", summary.okDays.length, "good")}
+      </div>
+
+      <div class="control-columns">
+        ${renderControlSection("Conflicten", summary.conflicts, "Geen harde conflicten.", "conflict")}
+        ${renderControlSection("Te controleren", summary.checks, "Geen controlepunten.", "attention")}
+        ${renderControlSection("Onvolledig", summary.incomplete, "Geen ontbrekende basisgegevens.", "incomplete")}
+        ${renderOkDays(summary.okDays)}
+      </div>
+    </section>
+  `;
+}
+
+function renderControlScore(label, value, type) {
+  return `
+    <div class="control-score control-score-${escapeHtml(type)}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function renderControlSection(title, analyses, emptyText, type) {
+  return `
+    <div class="control-section control-section-${escapeHtml(type)}">
+      <h4>${escapeHtml(title)}</h4>
+      ${analyses.length ? analyses.map(renderControlFinding).join("") : `<p class="muted-text">${escapeHtml(emptyText)}</p>`}
+    </div>
+  `;
+}
+
+function renderControlFinding(result) {
+  return `
+    <article class="control-finding">
+      <button type="button" class="link-button" data-open-day="${escapeHtml(result.datum)}">${escapeHtml(formatLongDate(result.datum))}</button>
+      <strong>${escapeHtml(result.melding || "Controlepunt")}</strong>
+      ${result.advies ? `<span>Hard advies: ${escapeHtml(result.advies)}</span>` : ""}
+    </article>
+  `;
+}
+
+function renderOkDays(days) {
+  const visibleDays = days.slice(0, 6);
+  return `
+    <div class="control-section control-section-good">
+      <h4>Geen probleem</h4>
+      ${visibleDays.length ? visibleDays.map((day) => `
+        <article class="control-finding">
+          <button type="button" class="link-button" data-open-day="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</button>
+          <span>Invoer aanwezig, geen open controlepunt.</span>
+        </article>
+      `).join("") : "<p class=\"muted-text\">Nog geen dag zonder aandachtspunt.</p>"}
+      ${days.length > visibleDays.length ? `<p class="control-meta">Nog ${days.length - visibleDays.length} normale dagen.</p>` : ""}
     </div>
   `;
 }
@@ -1308,6 +1421,13 @@ function openDay(date) {
   showView("cockpit");
 }
 
+function rerunMonthControl(monthId) {
+  if (!getMonth(monthId)) return;
+  runAnalysis(monthId);
+  saveData("controle_opnieuw_uitgevoerd");
+  renderApp();
+}
+
 function deleteScheduleItem(type, id) {
   const item = getItemByType(type, id);
   if (!item) return;
@@ -1369,6 +1489,9 @@ function runAnalysis(monthId) {
   clearGeneratedAnalysis(monthId);
 
   const results = [
+    ...checkCompleteness(context),
+    ...checkInvalidTimes(context),
+    ...checkOverlappingServicesForSamePerson(context),
     ...checkMissingCoverage(context),
     ...checkBothParentsBusy(context)
   ];
@@ -1395,6 +1518,107 @@ function clearGeneratedAnalysis(monthId) {
   });
 }
 
+function checkCompleteness(context) {
+  const results = [];
+
+  if (!context.services.length) {
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: `${context.monthId}-01`,
+      ernst: "onvolledig",
+      categorie: "gegevens",
+      regelId: "regel_diensten_ontbreken",
+      betrokkenDienstIds: [],
+      betrokkenGezinsVerplichtingId: "",
+      melding: "Er zijn nog geen diensten ingevoerd voor deze maand",
+      advies: "Vul diensten in of laat de maand bewust in concept staan.",
+      signature: `diensten_ontbreken_${context.monthId}`
+    }));
+  }
+
+  if (!context.familyBlocks.length) {
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: `${context.monthId}-01`,
+      ernst: "onvolledig",
+      categorie: "gegevens",
+      regelId: "regel_gezin_ontbreekt",
+      betrokkenDienstIds: [],
+      betrokkenGezinsVerplichtingId: "",
+      melding: "Er zijn nog geen gezinsafspraken of dekkingmomenten ingevoerd",
+      advies: "Vul vaste gezinsmomenten in als die relevant zijn voor deze maand.",
+      signature: `gezin_ontbreekt_${context.monthId}`
+    }));
+  }
+
+  return results;
+}
+
+function checkInvalidTimes(context) {
+  const results = [];
+
+  context.services.forEach((service) => {
+    if (isValidTimeRange(service.start, service.einde)) return;
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: service.datum,
+      ernst: "aandacht",
+      categorie: "gegevens",
+      regelId: "regel_diensttijd_controleren",
+      betrokkenDienstIds: [service.id],
+      betrokkenGezinsVerplichtingId: "",
+      melding: `Diensttijd controleren voor ${getPersonLabel(service.persoonId)} op ${formatLongDate(service.datum)}`,
+      advies: "Controleer start- en eindtijd; de app kan deze dienst nu niet betrouwbaar beoordelen.",
+      signature: `diensttijd_${service.id}`
+    }));
+  });
+
+  context.familyBlocks.forEach((block) => {
+    if (isValidTimeRange(block.start, block.einde)) return;
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: block.datum,
+      ernst: "aandacht",
+      categorie: "gegevens",
+      regelId: "regel_gezinstijd_controleren",
+      betrokkenDienstIds: [],
+      betrokkenGezinsVerplichtingId: block.id,
+      melding: `${formatCodeLabel(block.type)} heeft een onduidelijke tijd op ${formatLongDate(block.datum)}`,
+      advies: "Controleer start- en eindtijd; dekking kan anders niet betrouwbaar worden berekend.",
+      signature: `gezinstijd_${block.id}`
+    }));
+  });
+
+  return results;
+}
+
+function checkOverlappingServicesForSamePerson(context) {
+  const results = [];
+  const servicesByPersonAndDate = groupBy(context.services, (service) => `${service.persoonId}_${service.datum}`);
+
+  Object.values(servicesByPersonAndDate).forEach((services) => {
+    services.forEach((service, index) => {
+      services.slice(index + 1).forEach((otherService) => {
+        if (!timesOverlap(service.start, service.einde, otherService.start, otherService.einde)) return;
+        results.push(createAnalysisResult({
+          monthId: context.monthId,
+          datum: service.datum,
+          ernst: "conflict",
+          categorie: "gegevens",
+          regelId: "regel_dubbele_dienst",
+          betrokkenDienstIds: [service.id, otherService.id],
+          betrokkenGezinsVerplichtingId: "",
+          melding: `${getPersonLabel(service.persoonId)} heeft overlappende diensten op ${formatLongDate(service.datum)}`,
+          advies: "Corrigeer of verwijder een van de overlappende diensten.",
+          signature: `dubbele_dienst_${service.id}_${otherService.id}`
+        }));
+      });
+    });
+  });
+
+  return results;
+}
+
 function checkMissingCoverage(context) {
   const results = [];
   context.familyBlocks
@@ -1417,7 +1641,7 @@ function checkMissingCoverage(context) {
         betrokkenDienstIds: overlappingServices.map((service) => service.id),
         betrokkenGezinsVerplichtingId: block.id,
         melding: `${formatCodeLabel(block.type)} op ${formatLongDate(block.datum)} is ongedekt`,
-        advies: "Zoek ruil, regel opvang of pas een dienst aan.",
+        advies: "Regel dekking of pas de dienst/gezinsafspraak aan.",
         signature: `kinddekking_${block.id}`
       }));
     });
@@ -1494,7 +1718,7 @@ function syncActionsWithAnalysis(monthId, results) {
   });
 
   results
-    .filter((result) => ["conflict", "waarschuwing", "keuze_nodig"].includes(result.ernst))
+    .filter((result) => ["conflict", "waarschuwing", "keuze_nodig", "onvolledig"].includes(result.ernst))
     .forEach((result) => createOrUpdateAction(result));
 }
 
@@ -1507,7 +1731,7 @@ function createOrUpdateAction(result) {
     maandPlanningId: result.maandPlanningId,
     datum: result.datum,
     titel: title,
-    type: result.categorie === "gezin" ? "opvang_regelen" : "controleren",
+    type: result.categorie === "gegevens" ? "gegevens_aanvullen" : "controleren",
     prioriteit: result.ernst === "conflict" ? "hoog" : "normaal",
     deadline: result.datum,
     gekoppeldeAnalyseIds: [result.id],
@@ -1566,10 +1790,14 @@ function updateMonthStatus(monthId) {
   const openActions = getOpenActions(monthId);
   const analyses = getVisibleAnalyses(monthId);
   const services = getMonthItems(monthId, "diensten");
+  const hasIncomplete = analyses.some((result) => result.ernst === "onvolledig");
+  const hasConflict = analyses.some((result) => result.ernst === "conflict");
 
   month.laatstBijgewerkt = new Date().toISOString();
-  if (openActions.some((action) => action.prioriteit === "hoog")) {
+  if (hasConflict || openActions.some((action) => action.prioriteit === "hoog")) {
     month.samenvattingStatus = "conflict";
+  } else if (hasIncomplete) {
+    month.samenvattingStatus = "onvolledig";
   } else if (analyses.length) {
     month.samenvattingStatus = "aandacht";
   } else if (!services.length) {
@@ -1621,6 +1849,11 @@ function bindEvents() {
     const deleteMonthButton = event.target.closest("[data-delete-month]");
     if (deleteMonthButton) {
       deleteMonth(deleteMonthButton.dataset.deleteMonth);
+    }
+
+    const runAnalysisButton = event.target.closest("[data-run-analysis]");
+    if (runAnalysisButton) {
+      rerunMonthControl(runAnalysisButton.dataset.runAnalysis);
     }
 
     const viewButton = event.target.closest("[data-view-target]");
@@ -1788,6 +2021,13 @@ function formatTimeRange(start, end) {
   return `${start || "?"}-${end || "?"}`;
 }
 
+function isValidTimeRange(start, end) {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  if (startMinutes === null || endMinutes === null) return false;
+  return startMinutes < endMinutes;
+}
+
 function timesOverlap(aStart, aEnd, bStart, bEnd) {
   const aStartMinutes = timeToMinutes(aStart);
   const aEndMinutes = timeToMinutes(aEnd);
@@ -1810,7 +2050,7 @@ function timeToMinutes(value) {
 
 function groupBy(items, key) {
   return items.reduce((groups, item) => {
-    const groupKey = item[key] || "";
+    const groupKey = typeof key === "function" ? key(item) : item[key] || "";
     if (!groups[groupKey]) groups[groupKey] = [];
     groups[groupKey].push(item);
     return groups;
