@@ -296,6 +296,44 @@ textarea {
   background: #eef4ff;
 }
 
+.danger-button {
+  border-color: #c43d3d;
+  background: #c43d3d;
+}
+
+.danger-button:hover {
+  background: #982f2f;
+}
+
+.storage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.file-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0 14px;
+}
+
+.file-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .stack {
   display: grid;
   gap: 10px;

@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.1-lokaal";
+const APP_VERSION = "0.1.2-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -603,6 +603,7 @@ function renderQuickEntry() {
 function renderStoragePanel() {
   const panel = document.getElementById("storage-panel");
   const data = state.data;
+  const snapshots = loadSnapshots();
   panel.innerHTML = `
     <div class="storage-list">
       <div class="storage-row"><span>Opslagsleutel</span><strong>${STORAGE_KEY}</strong></div>
@@ -611,11 +612,138 @@ function renderStoragePanel() {
       <div class="storage-row"><span>RevisionId</span><strong>${escapeHtml(data.revisionId || "nog geen revisie")}</strong></div>
       <div class="storage-row"><span>Laatst opgeslagen</span><strong>${formatDateTime(data.lastModified)}</strong></div>
       <div class="storage-row"><span>Maanden</span><strong>${data.maandPlanningen.length}</strong></div>
+      <div class="storage-row"><span>Diensten</span><strong>${data.diensten.length}</strong></div>
+      <div class="storage-row"><span>Gezinsitems</span><strong>${data.gezinsVerplichtingen.length}</strong></div>
+      <div class="storage-row"><span>Acties</span><strong>${data.actieItems.length}</strong></div>
+      <div class="storage-row"><span>Snapshots</span><strong>${snapshots.length}</strong></div>
     </div>
-    <p class="empty-state">
-      Backup, restore en lokaal wissen komen in een volgende 0.1-stap. Deze versie bewaart de hoofddata al automatisch in localStorage.
+    <div class="storage-actions">
+      <button type="button" data-backup-download>Backup downloaden</button>
+      <label class="file-button">
+        Backup terugzetten
+        <input id="backup-file-input" type="file" accept="application/json,.json" data-backup-file>
+      </label>
+      <button type="button" class="danger-button" data-clear-local>Lokale data wissen</button>
+    </div>
+    <p class="empty-state" id="backup-message">
+      Backups bevatten alleen lokale roostercoach-data. Er wordt niets naar een server gesynchroniseerd.
     </p>
   `;
+}
+
+function downloadBackup() {
+  const backup = {
+    backupType: "roostercoach-backup",
+    backupVersion: 1,
+    appVersion: APP_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: state.data,
+    snapshots: loadSnapshots()
+  };
+  const json = JSON.stringify(backup, null, 2);
+  const blob = new Blob([json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `roostercoach-backup-${formatBackupTimestamp(new Date())}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  setBackupMessage("Backupbestand is gemaakt.");
+}
+
+function restoreBackup(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result || ""));
+      const backupData = parsed && parsed.backupType === "roostercoach-backup" ? parsed.data : parsed;
+      if (!validateBackupData(backupData)) {
+        setBackupMessage("Dit bestand lijkt geen geldige roostercoach-backup.", true);
+        return;
+      }
+
+      const monthCount = Array.isArray(backupData.maandPlanningen) ? backupData.maandPlanningen.length : 0;
+      const serviceCount = Array.isArray(backupData.diensten) ? backupData.diensten.length : 0;
+      const ok = window.confirm(`Backup terugzetten?\n\nMaanden: ${monthCount}\nDiensten: ${serviceCount}\n\nEr wordt eerst een snapshot gemaakt van je huidige lokale data.`);
+      if (!ok) return;
+
+      createSnapshot("voor_backup_restore");
+      state.data = normalizeData(backupData);
+      state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+      saveData("backup_teruggezet");
+      showView("backup");
+      setBackupMessage("Backup is teruggezet.");
+    } catch (error) {
+      console.error("Backup terugzetten mislukt", error);
+      setBackupMessage("Backup terugzetten is mislukt. Controleer of het JSON-bestand klopt.", true);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function clearLocalData() {
+  const hasData = state.data.maandPlanningen.length ||
+    state.data.diensten.length ||
+    state.data.gezinsVerplichtingen.length ||
+    state.data.wensen.length ||
+    state.data.actieItems.length;
+  const message = hasData
+    ? "Lokale data wissen?\n\nMaak eerst een backup als je deze gegevens wilt bewaren. Er wordt een snapshot gemaakt, maar de app keert terug naar een lege start."
+    : "Lokale data wissen en terug naar lege start?";
+
+  if (!window.confirm(message)) return;
+  createSnapshot("voor_lokaal_wissen");
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(SETTINGS_KEY);
+  localStorage.removeItem(SYNC_KEY);
+  localStorage.removeItem(IMPORT_DRAFT_KEY);
+  state.data = createEmptyData();
+  saveData("lokale_data_gewist");
+  showView("months");
+  setBackupMessage("Lokale data is gewist. De app staat weer op de lege start.");
+}
+
+function createSnapshot(reason) {
+  const snapshots = loadSnapshots();
+  const snapshot = {
+    id: generateId("snapshot"),
+    gemaaktOp: new Date().toISOString(),
+    reden: reason,
+    dataVersion: DATA_VERSION,
+    aantalMaanden: state.data.maandPlanningen.length,
+    data: state.data
+  };
+  snapshots.unshift(snapshot);
+  localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshots.slice(0, 10)));
+  return snapshot;
+}
+
+function loadSnapshots() {
+  try {
+    const raw = localStorage.getItem(SNAPSHOT_KEY);
+    const snapshots = raw ? JSON.parse(raw) : [];
+    return Array.isArray(snapshots) ? snapshots : [];
+  } catch (error) {
+    console.error("Snapshots lezen mislukt", error);
+    return [];
+  }
+}
+
+function validateBackupData(data) {
+  if (!data || typeof data !== "object") return false;
+  return MODULE_1_ARRAYS.every((key) => Array.isArray(data[key] || [])) &&
+    (!data.dataVersion || Number(data.dataVersion) === DATA_VERSION);
+}
+
+function setBackupMessage(message, isError = false) {
+  const element = document.getElementById("backup-message");
+  if (!element) return;
+  element.textContent = message;
+  element.style.color = isError ? "var(--conflict-text)" : "var(--muted)";
 }
 
 function buildMonthDays(month) {
@@ -925,6 +1053,14 @@ function bindEvents() {
     if (viewButton) {
       showView(viewButton.dataset.viewTarget);
     }
+
+    if (event.target.closest("[data-backup-download]")) {
+      downloadBackup();
+    }
+
+    if (event.target.closest("[data-clear-local]")) {
+      clearLocalData();
+    }
   });
 
   document.getElementById("create-month-form").addEventListener("submit", (event) => {
@@ -947,6 +1083,13 @@ function bindEvents() {
     if (event.target.id === "wish-form") {
       event.preventDefault();
       addWish(formToObject(event.target));
+    }
+  });
+
+  document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-backup-file]")) {
+      restoreBackup(event.target.files[0]);
+      event.target.value = "";
     }
   });
 }
@@ -999,6 +1142,20 @@ function formatDateTime(value) {
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
+}
+
+function formatBackupTimestamp(date) {
+  const parts = new Intl.DateTimeFormat("nl-NL", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).formatToParts(date).reduce((acc, part) => {
+    acc[part.type] = part.value;
+    return acc;
+  }, {});
+  return `${parts.year}-${parts.month}-${parts.day}-${parts.hour}${parts.minute}`;
 }
 
 function formatLongDate(value) {
