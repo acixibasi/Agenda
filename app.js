@@ -1541,6 +1541,8 @@ function addService(input) {
     return;
   }
 
+  if (!validateServiceDutyAvailability(input)) return;
+
   const service = {
     id: generateId("dienst"),
     persoonId: input.persoonId,
@@ -1571,6 +1573,8 @@ function updateService(id, input) {
   const previousMonthId = service.maandPlanningId;
   const monthId = dateToMonthId(input.datum);
 
+  if (!validateServiceDutyAvailability(input)) return;
+
   Object.assign(service, {
     persoonId: input.persoonId,
     maandPlanningId: monthId,
@@ -1586,6 +1590,37 @@ function updateService(id, input) {
   });
 
   finishItemMutation(previousMonthId, monthId, "dienst_bijgewerkt", input.datum);
+}
+
+function validateServiceDutyAvailability(input) {
+  const dutyName = findDutyNameForServiceInput(input);
+  if (!dutyName || isDutyNameAvailableOnDate(dutyName, input.datum)) return true;
+
+  const message = `${dutyName.naam} is niet beschikbaar op ${formatLongDate(input.datum)}. Pas de datum aan of kies een andere dienst.`;
+  window.alert(message);
+  setSaveStatus("Dienst niet beschikbaar op deze dag", true);
+  return false;
+}
+
+function findDutyNameForServiceInput(input) {
+  const code = String(input.dienstCode || "").trim().toLowerCase();
+  if (!code) return null;
+  const location = String(input.locatie || "").trim().toLowerCase();
+  const activeMonth = getMonth(dateToMonthId(input.datum));
+  const activeStage = activeMonth?.planningStage || state.data.instellingen.standaardPlanningStage;
+
+  return getDutyNames().find((dutyName) => {
+    const nameMatches = String(dutyName.naam || "").trim().toLowerCase() === code;
+    if (!nameMatches) return false;
+    const personMatches = dutyName.persoonId === "beiden" || dutyName.persoonId === input.persoonId;
+    if (!personMatches) return false;
+    const typeMatches = !input.dienstType || dutyName.dienstType === input.dienstType;
+    if (!typeMatches) return false;
+    const post = String(dutyName.post || dutyName.locatie || "").trim().toLowerCase();
+    const locationMatches = !post || !location || post === location;
+    if (!locationMatches) return false;
+    return getPlanningStageIndex(activeStage) >= getPlanningStageIndex(dutyName.beschikbaarVanaf);
+  }) || null;
 }
 
 function getDutyNames() {
@@ -1678,6 +1713,10 @@ function applyDutyName(id) {
   const dutyName = getDutyNames().find((item) => item.id === id);
   const form = document.getElementById("service-form");
   if (!dutyName || !form) return;
+  if (!isDutyNameAvailableOnDate(dutyName, form.elements.datum.value)) {
+    window.alert(`${dutyName.naam} is niet beschikbaar op ${formatLongDate(form.elements.datum.value)}.`);
+    return;
+  }
 
   if (dutyName.persoonId !== "beiden") {
     form.elements.persoonId.value = dutyName.persoonId;
