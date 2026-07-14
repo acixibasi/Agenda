@@ -7,7 +7,8 @@ let state = {
   quickEntry: null,
   selectedDate: null,
   pendingFocusDate: null,
-  cockpitFilter: "all"
+  cockpitFilter: "all",
+  editingDutyNameId: null
 };
 
 function createEmptyData() {
@@ -923,6 +924,7 @@ function renderSettingsPanel() {
   if (!panel) return;
   const dutyNames = getDutyNames();
   const contractHours = getContractHours();
+  const editingDutyName = getEditingDutyName();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -930,7 +932,10 @@ function renderSettingsPanel() {
             <strong>${escapeHtml(dutyName.naam)}</strong>
             <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
           </div>
-          <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-edit-duty-name="${escapeHtml(dutyName.id)}">Wijzig</button>
+            <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
+          </div>
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen dienstnamen ingesteld.</div>";
@@ -966,7 +971,7 @@ function renderSettingsPanel() {
         <div class="storage-row"><span>Eva</span><strong>${dutyNames.filter((item) => item.persoonId === "persoon_vrouw").length}</strong></div>
         <div class="storage-row"><span>Vanaf R2 extra</span><strong>${dutyNames.filter((item) => item.beschikbaarVanaf === "R2_afstemming").length}</strong></div>
       </div>
-      ${renderSettingsDutyNameForm()}
+      ${renderSettingsDutyNameForm(editingDutyName)}
       <div class="duty-name-list settings-duty-list">
         ${dutyRows}
       </div>
@@ -983,48 +988,53 @@ function renderSettingsPanel() {
   `;
 }
 
-function renderSettingsDutyNameForm() {
+function renderSettingsDutyNameForm(editingDutyName = null) {
+  const dutyName = editingDutyName || {};
+  const submitLabel = editingDutyName ? "Dienstkeuze opslaan" : "Dienstkeuze toevoegen";
   return `
     <form id="settings-duty-name-form" class="duty-name-form settings-duty-form">
       <label>
         Dienstnaam/code
-        <input name="naam" type="text" placeholder="Bijv. A, LD, Nacht 8" required>
+        <input name="naam" type="text" value="${escapeHtml(dutyName.naam || "")}" placeholder="Bijv. A, LD, Nacht 8" required>
       </label>
       <label>
         Persoon
         <select name="persoonId" required>
-          ${renderOptions(Object.keys(DUTY_PERSON_OPTIONS), DUTY_PERSON_OPTIONS, "persoon_jij")}
+          ${renderOptions(Object.keys(DUTY_PERSON_OPTIONS), DUTY_PERSON_OPTIONS, dutyName.persoonId || "persoon_jij")}
         </select>
       </label>
       <label>
         Vanaf ronde
         <select name="beschikbaarVanaf" required>
-          ${renderOptions(PLANNING_STAGES.map((stage) => stage.value), getPlanningStageLabels(), "R1_wensen")}
+          ${renderOptions(PLANNING_STAGES.map((stage) => stage.value), getPlanningStageLabels(), dutyName.beschikbaarVanaf || "R1_wensen")}
         </select>
       </label>
       <label>
         Post
-        <input name="post" type="text" placeholder="Bijv. post noord">
+        <input name="post" type="text" value="${escapeHtml(dutyName.post || "")}" placeholder="Bijv. post noord">
       </label>
       <label>
         Type
         <select name="dienstType" required>
-          ${renderOptions(SERVICE_TYPES, null, "overig")}
+          ${renderOptions(SERVICE_TYPES, null, dutyName.dienstType || "overig")}
         </select>
       </label>
       <label>
         Start
-        <input name="start" type="time" required>
+        <input name="start" type="time" value="${escapeHtml(dutyName.start || "")}" required>
       </label>
       <label>
         Einde
-        <input name="einde" type="time" required>
+        <input name="einde" type="time" value="${escapeHtml(dutyName.einde || "")}" required>
       </label>
       <label>
         Locatie/detail
-        <input name="locatie" type="text" placeholder="Optioneel">
+        <input name="locatie" type="text" value="${escapeHtml(dutyName.locatie || "")}" placeholder="Optioneel">
       </label>
-      <button type="submit">Dienstkeuze toevoegen</button>
+      <div class="form-actions">
+        <button type="submit">${submitLabel}</button>
+        ${editingDutyName ? "<button type=\"button\" class=\"subtle-button\" data-cancel-duty-edit>Annuleer</button>" : ""}
+      </div>
     </form>
   `;
 }
@@ -1566,7 +1576,7 @@ function updateContractHours(input) {
 
 function addDutyName(input) {
   const dutyName = {
-    id: generateId("dienstnaam"),
+    id: state.editingDutyNameId || generateId("dienstnaam"),
     naam: String(input.naam || "").trim(),
     persoonId: DUTY_PERSON_OPTIONS[input.persoonId] ? input.persoonId : "persoon_jij",
     beschikbaarVanaf: PLANNING_STAGES.some((stage) => stage.value === input.beschikbaarVanaf) ? input.beschikbaarVanaf : "R1_wensen",
@@ -1579,20 +1589,44 @@ function addDutyName(input) {
 
   if (!dutyName.naam || !dutyName.start || !dutyName.einde) return;
 
+  const reason = state.editingDutyNameId ? "dienstnaam_bijgewerkt" : "dienstnaam_toegevoegd";
   state.data.instellingen.dienstNamen = [
-    ...getDutyNames().filter((item) => getDutyNameKey(item) !== getDutyNameKey(dutyName)),
+    ...getDutyNames().filter((item) => {
+      if (state.editingDutyNameId) return item.id !== state.editingDutyNameId;
+      return getDutyNameKey(item) !== getDutyNameKey(dutyName);
+    }),
     dutyName
   ];
-  saveData("dienstnaam_toegevoegd");
+  state.editingDutyNameId = null;
+  saveData(reason);
   renderQuickEntry();
   renderSettingsPanel();
 }
 
 function deleteDutyName(id) {
   state.data.instellingen.dienstNamen = getDutyNames().filter((dutyName) => dutyName.id !== id);
+  if (state.editingDutyNameId === id) {
+    state.editingDutyNameId = null;
+  }
   saveData("dienstnaam_verwijderd");
   renderQuickEntry();
   renderSettingsPanel();
+}
+
+function startEditDutyName(id) {
+  if (!getDutyNames().some((dutyName) => dutyName.id === id)) return;
+  state.editingDutyNameId = id;
+  renderSettingsPanel();
+}
+
+function cancelEditDutyName() {
+  state.editingDutyNameId = null;
+  renderSettingsPanel();
+}
+
+function getEditingDutyName() {
+  if (!state.editingDutyNameId) return null;
+  return getDutyNames().find((dutyName) => dutyName.id === state.editingDutyNameId) || null;
 }
 
 function applyDutyName(id) {
@@ -2381,9 +2415,20 @@ function bindEvents() {
       return;
     }
 
+    const editDutyNameButton = event.target.closest("[data-edit-duty-name]");
+    if (editDutyNameButton) {
+      startEditDutyName(editDutyNameButton.dataset.editDutyName);
+      return;
+    }
+
     const deleteDutyNameButton = event.target.closest("[data-delete-duty-name]");
     if (deleteDutyNameButton) {
       deleteDutyName(deleteDutyNameButton.dataset.deleteDutyName);
+      return;
+    }
+
+    if (event.target.closest("[data-cancel-duty-edit]")) {
+      cancelEditDutyName();
       return;
     }
 
