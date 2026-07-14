@@ -521,7 +521,7 @@ function buildControlSummary(month, days) {
   const notifications = analyses.filter((item) => item.ernst === "notificatie");
   const closedNotifications = getClosedNotifications(month.id);
   const okDays = days.filter((day) => {
-    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
+    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length;
     const hasProblem = day.analyses.length || day.actions.length;
     return hasContent && !hasProblem;
   });
@@ -668,7 +668,7 @@ function renderMonthBoard(month, days) {
 function renderMonthBoardDay(day) {
   const status = getDayBoardStatus(day);
   const isSelected = state.selectedDate === day.date;
-  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length;
+  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + day.schoolEvents.length;
   const signalCount = day.analyses.length + day.actions.length;
   return `
     <button type="button" class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
@@ -680,6 +680,7 @@ function renderMonthBoardDay(day) {
       <span class="month-board-items">
         ${day.services.map(renderMonthBoardService).join("")}
         ${day.familyBlocks.map(renderMonthBoardFamilyBlock).join("")}
+        ${day.schoolEvents.map(renderMonthBoardSchoolEvent).join("")}
         ${day.wishes.map(renderMonthBoardWish).join("")}
         ${day.actions.map(renderMonthBoardAction).join("")}
         ${day.analyses.map(renderMonthBoardAnalysis).join("")}
@@ -712,6 +713,15 @@ function renderMonthBoardFamilyBlock(block) {
   return `
     <span class="month-board-item month-board-item-family">
       Gezin: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}
+    </span>
+  `;
+}
+
+function renderMonthBoardSchoolEvent(event) {
+  const coverage = formatSchoolCoverageLabel(event);
+  return `
+    <span class="month-board-item month-board-item-family">
+      School: ${escapeHtml(event.label || formatCodeLabel(event.type))} ${escapeHtml(formatTimeRange(event.start, event.einde))}${coverage ? ` - ${escapeHtml(coverage)}` : ""}
     </span>
   `;
 }
@@ -753,7 +763,7 @@ function dayMatchesFilter(day, filter) {
   if (filter === "incomplete") return activeAnalyses.some((result) => result.ernst === "onvolledig");
   if (filter === "actions") return day.actions.length > 0;
   if (filter === "ok") {
-    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
+    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length;
     return hasContent && !activeAnalyses.length && !day.actions.length;
   }
   return true;
@@ -807,7 +817,7 @@ function renderOkDays(days) {
 }
 
 function renderDayRow(day) {
-  const hasItems = day.services.length || day.familyBlocks.length || day.wishes.length;
+  const hasItems = day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length;
   const hasSignals = day.analyses.length || day.actions.length;
   const isSelected = state.selectedDate === day.date;
   return `
@@ -834,6 +844,11 @@ function renderDayRow(day) {
               <span class="mini-item editable-item">
                 <span>${escapeHtml(formatCodeLabel(block.type || "Gezin"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
                 ${renderItemButtons("family", block.id)}
+              </span>
+            `).join("")}
+            ${day.schoolEvents.map((event) => `
+              <span class="mini-item">
+                <span>School: ${escapeHtml(event.label || formatCodeLabel(event.type))} ${escapeHtml(formatTimeRange(event.start, event.einde))}${formatSchoolCoverageLabel(event) ? ` - ${escapeHtml(formatSchoolCoverageLabel(event))}` : ""}</span>
               </span>
             `).join("")}
             ${day.wishes.map((wish) => `
@@ -863,7 +878,7 @@ function getSelectedDayForMonth(month, days) {
 
 function findFirstRelevantDay(days) {
   return days.find((day) => {
-    return day.services.length || day.familyBlocks.length || day.wishes.length || day.analyses.length || day.actions.length;
+    return day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length || day.analyses.length || day.actions.length;
   }) || days[0];
 }
 
@@ -871,6 +886,7 @@ function renderDayDetail(day) {
   if (!day) return "";
   const hasServices = day.services.length > 0;
   const hasFamilyBlocks = day.familyBlocks.length > 0;
+  const hasSchoolEvents = day.schoolEvents.length > 0;
   const hasWishes = day.wishes.length > 0;
   const hasAnalyses = day.analyses.length > 0;
   const hasActions = day.actions.length > 0;
@@ -897,6 +913,10 @@ function renderDayDetail(day) {
         <div class="day-detail-block">
           <h4>Gezin</h4>
           ${hasFamilyBlocks ? day.familyBlocks.map(renderFamilyDetail).join("") : "<p class=\"muted-text\">Geen gezinsafspraken op deze dag.</p>"}
+        </div>
+        <div class="day-detail-block">
+          <h4>School</h4>
+          ${hasSchoolEvents ? day.schoolEvents.map(renderSchoolEventDetail).join("") : "<p class=\"muted-text\">Geen schoolitems op deze dag.</p>"}
         </div>
         <div class="day-detail-block">
           <h4>Wensen</h4>
@@ -934,6 +954,27 @@ function renderFamilyDetail(block) {
       ${renderItemButtons("family", block.id)}
     </article>
   `;
+}
+
+function renderSchoolEventDetail(event) {
+  const coverage = formatSchoolCoverageLabel(event);
+  return `
+    <article class="detail-item">
+      <strong>${escapeHtml(event.label || formatCodeLabel(event.type || "School"))}</strong>
+      ${event.start || event.einde ? `<span>${escapeHtml(formatTimeRange(event.start, event.einde))}</span>` : ""}
+      ${coverage ? `<span>${escapeHtml(coverage)}</span>` : ""}
+      <span>${escapeHtml(formatCodeLabel(event.type || "school"))}</span>
+      ${event.opmerking ? `<span>${escapeHtml(event.opmerking)}</span>` : ""}
+    </article>
+  `;
+}
+
+function formatSchoolCoverageLabel(event) {
+  if (event.type !== "schooltijd") return "";
+  const parts = [];
+  if (event.brengenNodig) parts.push("brengen");
+  if (event.halenNodig) parts.push("halen");
+  return parts.length ? `${parts.join(" en ")} nodig` : "geen brengen/halen";
 }
 
 function renderWishDetail(wish) {
@@ -1086,7 +1127,7 @@ function renderSettingsPanel() {
         <div class="duty-name-row">
           <div>
             <strong>${escapeHtml(getSchoolTimeLabel(schoolTime))}</strong>
-            <span>${escapeHtml(formatTimeRange(schoolTime.start, schoolTime.einde))}${schoolTime.opmerking ? ` - ${escapeHtml(schoolTime.opmerking)}` : ""}</span>
+            <span>${escapeHtml(formatTimeRange(schoolTime.start, schoolTime.einde))} - ${schoolTime.brengenNodig ? "brengen" : "niet brengen"} / ${schoolTime.halenNodig ? "halen" : "niet halen"}${schoolTime.opmerking ? ` - ${escapeHtml(schoolTime.opmerking)}` : ""}</span>
           </div>
           <div class="item-actions">
             <button type="button" class="tiny-button" data-delete-school-time="${escapeHtml(schoolTime.id)}">Verwijder</button>
@@ -1208,6 +1249,14 @@ function renderSettingsPanel() {
         <label>
           Einde school
           <input name="einde" type="time" required>
+        </label>
+        <label class="checkbox-label">
+          <input name="brengenNodig" type="checkbox" value="true" checked>
+          Brengen nodig
+        </label>
+        <label class="checkbox-label">
+          <input name="halenNodig" type="checkbox" value="true" checked>
+          Halen nodig
         </label>
         <label class="full-width">
           Opmerking
@@ -1807,6 +1856,7 @@ function buildMonthDays(month) {
   const services = getMonthItems(month.id, "diensten");
   const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
   const wishes = getMonthItems(month.id, "wensen");
+  const schoolEvents = getSchoolEventsForMonth(month);
   const analyses = getVisibleAnalyses(month.id);
   const actions = getOpenActions(month.id);
 
@@ -1818,6 +1868,7 @@ function buildMonthDays(month) {
       services: services.filter((item) => item.datum === date),
       familyBlocks: familyBlocks.filter((item) => item.datum === date),
       wishes: wishes.filter((item) => item.datum === date),
+      schoolEvents: schoolEvents.filter((item) => item.date === date),
       analyses: analyses.filter((item) => item.datum === date),
       actions: actions.filter((item) => item.datum === date || item.deadline === date)
     };

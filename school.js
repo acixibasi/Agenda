@@ -9,6 +9,8 @@ function normalizeSchoolTimes(value) {
       dag: WEEKDAY_OPTIONS.some((day) => day.value === String(schoolTime.dag)) ? String(schoolTime.dag) : "1",
       start: schoolTime.start || "",
       einde: schoolTime.einde || "",
+      brengenNodig: schoolTime.brengenNodig !== false && schoolTime.brengenNodig !== "false",
+      halenNodig: schoolTime.halenNodig !== false && schoolTime.halenNodig !== "false",
       opmerking: String(schoolTime.opmerking || "").trim()
     }))
     .filter((schoolTime) => schoolTime.start && schoolTime.einde);
@@ -58,6 +60,98 @@ function getSchoolPeriods() {
   return state.data.contextPeriodes.filter((period) => ["schoolvakantie", "studiedag"].includes(period.type));
 }
 
+function getSchoolEventsForMonth(month) {
+  if (!month) return [];
+  const dates = getMonthDateValues(month);
+  const periods = getSchoolPeriods();
+  const schoolTimes = getSchoolTimes();
+  const events = [];
+
+  dates.forEach((date) => {
+    const datePeriods = periods.filter((period) => isDateInRange(date, period.startDatum, period.eindDatum));
+    datePeriods.forEach((period) => {
+      events.push({
+        id: `schoolperiode_${period.id}_${date}`,
+        date,
+        type: period.type,
+        label: period.naam || formatCodeLabel(period.type),
+        start: "",
+        einde: "",
+        opmerking: period.opmerking || "",
+        sourceId: period.id
+      });
+    });
+
+    if (datePeriods.some((period) => ["schoolvakantie", "studiedag"].includes(period.type))) return;
+
+    const weekday = String(new Date(`${date}T12:00:00`).getDay());
+    schoolTimes
+      .filter((schoolTime) => String(schoolTime.dag) === weekday)
+      .forEach((schoolTime) => {
+        events.push({
+          id: `schooltijd_${schoolTime.id}_${date}`,
+          date,
+          type: "schooltijd",
+          label: getSchoolTimeLabel(schoolTime),
+          start: schoolTime.start,
+          einde: schoolTime.einde,
+          brengenNodig: schoolTime.brengenNodig,
+          halenNodig: schoolTime.halenNodig,
+          opmerking: schoolTime.opmerking || "",
+          sourceId: schoolTime.id
+        });
+      });
+  });
+
+  return events;
+}
+
+function getSchoolCoverageBlocksForMonth(month) {
+  if (!month) return [];
+  return getSchoolEventsForMonth(month)
+    .filter((event) => event.type === "schooltijd")
+    .flatMap((event) => {
+      const blocks = [];
+      if (event.brengenNodig) {
+        blocks.push(createSchoolCoverageBlock(event, "school_brengen", event.start, addMinutesToTime(event.start, 15)));
+      }
+      if (event.halenNodig) {
+        blocks.push(createSchoolCoverageBlock(event, "school_halen", addMinutesToTime(event.einde, -15), event.einde));
+      }
+      return blocks;
+    });
+}
+
+function createSchoolCoverageBlock(event, type, start, einde) {
+  return {
+    id: `${event.id}_${type}`,
+    maandPlanningId: dateToMonthId(event.date),
+    type,
+    kindId: "",
+    datum: event.date,
+    start,
+    einde,
+    hardheid: "hard",
+    dekkingNodig: true,
+    opmerking: event.label,
+    sourceSchoolEventId: event.id,
+    generated: true
+  };
+}
+
+function addMinutesToTime(value, minutesToAdd) {
+  const minutes = timeToMinutes(value);
+  if (minutes === null) return value || "";
+  const normalized = (minutes + minutesToAdd + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const mins = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+}
+
+function isDateInRange(date, startDate, endDate) {
+  return Boolean(date && startDate && endDate && date >= startDate && date <= endDate);
+}
+
 function getWeekdayLabels() {
   return WEEKDAY_OPTIONS.reduce((labels, day) => {
     labels[day.value] = day.label;
@@ -94,6 +188,8 @@ function addSchoolTime(input) {
     dag: WEEKDAY_OPTIONS.some((day) => day.value === String(input.dag)) ? String(input.dag) : "1",
     start: input.start || "",
     einde: input.einde || "",
+    brengenNodig: input.brengenNodig === "true",
+    halenNodig: input.halenNodig === "true",
     opmerking: String(input.opmerking || "").trim()
   };
   if (!schoolTime.start || !schoolTime.einde) return;

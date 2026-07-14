@@ -42,7 +42,10 @@ function buildAnalysisContext(monthId) {
     monthId,
     month: getMonth(monthId),
     services: getMonthItems(monthId, "diensten"),
-    familyBlocks: getMonthItems(monthId, "gezinsVerplichtingen"),
+    familyBlocks: [
+      ...getMonthItems(monthId, "gezinsVerplichtingen"),
+      ...getSchoolCoverageBlocksForMonth(getMonth(monthId))
+    ],
     wishes: getMonthItems(monthId, "wensen"),
     analyses: getMonthItems(monthId, "analyseResultaten"),
     actions: getMonthItems(monthId, "actieItems")
