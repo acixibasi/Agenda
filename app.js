@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.7-lokaal";
+const APP_VERSION = "0.1.8-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -111,7 +111,8 @@ let state = {
   data: createEmptyData(),
   currentView: "months",
   editing: null,
-  quickEntry: null
+  quickEntry: null,
+  selectedDate: null
 };
 
 function createEmptyData() {
@@ -224,14 +225,16 @@ function createMonth(year, month, planningStage) {
   state.data.maandPlanningen.sort((a, b) => a.id.localeCompare(b.id));
   state.data.instellingen.actieveMaandId = monthId;
   state.quickEntry = null;
+  state.selectedDate = `${monthId}-01`;
   saveData("maand_aangemaakt");
   showView("cockpit");
   return monthPlanning;
 }
 
-function openMonth(monthId) {
+function openMonth(monthId, selectedDate = null) {
   state.editing = null;
   state.quickEntry = null;
+  state.selectedDate = selectedDate;
   state.data.instellingen.actieveMaandId = monthId;
   saveData("maand_geopend");
   showView("cockpit");
@@ -252,6 +255,8 @@ function deleteMonth(monthId) {
   if (state.data.instellingen.actieveMaandId === monthId) {
     state.data.instellingen.actieveMaandId = null;
     state.editing = null;
+    state.quickEntry = null;
+    state.selectedDate = null;
   }
 
   saveData("maand_verwijderd");
@@ -280,6 +285,7 @@ function duplicateMonth(monthId) {
   duplicateMonthCollection("wensen", monthId, targetId, copyWishForMonth);
   state.data.instellingen.actieveMaandId = targetId;
   state.quickEntry = null;
+  state.selectedDate = null;
   runAnalysis(targetId);
   saveData("maand_gedupliceerd");
   showView("cockpit");
@@ -490,6 +496,7 @@ function renderMonthCockpit() {
   const actions = getOpenActions(month.id);
   const closedActions = getClosedActions(month.id);
   const days = buildMonthDays(month);
+  const selectedDay = getSelectedDayForMonth(month, days);
 
   content.innerHTML = `
     <div class="cockpit-header">
@@ -533,6 +540,8 @@ function renderMonthCockpit() {
         </div>
       </section>
 
+      ${renderDayDetail(selectedDay)}
+
       <section class="stack">
         ${days.map(renderDayRow).join("")}
       </section>
@@ -543,11 +552,13 @@ function renderMonthCockpit() {
 function renderDayRow(day) {
   const hasItems = day.services.length || day.familyBlocks.length || day.wishes.length;
   const hasSignals = day.analyses.length || day.actions.length;
+  const isSelected = state.selectedDate === day.date;
   return `
-    <article class="day-row ${hasSignals ? "day-row-signal" : ""}">
+    <article class="day-row ${hasSignals ? "day-row-signal" : ""} ${isSelected ? "day-row-selected" : ""}">
       <div>
         <div class="day-date">${escapeHtml(formatLongDate(day.date))}</div>
         <div class="day-actions">
+          <button type="button" class="tiny-button" data-open-day="${escapeHtml(day.date)}">${isSelected ? "Open" : "Bekijk"}</button>
           <button type="button" class="tiny-button" data-quick-add="service" data-date="${escapeHtml(day.date)}">Dienst</button>
           <button type="button" class="tiny-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin</button>
           <button type="button" class="tiny-button" data-quick-add="wish" data-date="${escapeHtml(day.date)}">Wens</button>
@@ -580,6 +591,121 @@ function renderDayRow(day) {
           </div>
         ` : "<span class=\"mini-item\">Geen items</span>"}
       </div>
+    </article>
+  `;
+}
+
+function getSelectedDayForMonth(month, days) {
+  if (!days.length) return null;
+  const selectedDate = state.selectedDate && dateToMonthId(state.selectedDate) === month.id
+    ? state.selectedDate
+    : findFirstRelevantDay(days).date;
+  state.selectedDate = selectedDate;
+  return days.find((day) => day.date === selectedDate) || days[0];
+}
+
+function findFirstRelevantDay(days) {
+  return days.find((day) => {
+    return day.services.length || day.familyBlocks.length || day.wishes.length || day.analyses.length || day.actions.length;
+  }) || days[0];
+}
+
+function renderDayDetail(day) {
+  if (!day) return "";
+  const hasServices = day.services.length > 0;
+  const hasFamilyBlocks = day.familyBlocks.length > 0;
+  const hasWishes = day.wishes.length > 0;
+  const hasAnalyses = day.analyses.length > 0;
+  const hasActions = day.actions.length > 0;
+
+  return `
+    <section class="panel day-detail" aria-live="polite">
+      <div class="day-detail-header">
+        <div>
+          <p class="eyebrow">Dagdetails</p>
+          <h3 class="form-section-title">${escapeHtml(formatLongDate(day.date))}</h3>
+        </div>
+        <div class="toolbar">
+          <button type="button" class="subtle-button" data-quick-add="service" data-date="${escapeHtml(day.date)}">Dienst toevoegen</button>
+          <button type="button" class="subtle-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin toevoegen</button>
+          <button type="button" class="subtle-button" data-quick-add="wish" data-date="${escapeHtml(day.date)}">Wens toevoegen</button>
+        </div>
+      </div>
+
+      <div class="day-detail-grid">
+        <div class="day-detail-block">
+          <h4>Diensten</h4>
+          ${hasServices ? day.services.map(renderServiceDetail).join("") : "<p class=\"muted-text\">Geen diensten op deze dag.</p>"}
+        </div>
+        <div class="day-detail-block">
+          <h4>Gezin</h4>
+          ${hasFamilyBlocks ? day.familyBlocks.map(renderFamilyDetail).join("") : "<p class=\"muted-text\">Geen gezinsafspraken op deze dag.</p>"}
+        </div>
+        <div class="day-detail-block">
+          <h4>Wensen</h4>
+          ${hasWishes ? day.wishes.map(renderWishDetail).join("") : "<p class=\"muted-text\">Geen wensen op deze dag.</p>"}
+        </div>
+        <div class="day-detail-block">
+          <h4>Aandacht en acties</h4>
+          ${hasAnalyses ? day.analyses.map(renderAnalysisDetail).join("") : "<p class=\"muted-text\">Geen analysepunten.</p>"}
+          ${hasActions ? day.actions.map(renderCompactActionDetail).join("") : "<p class=\"muted-text\">Geen open acties.</p>"}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderServiceDetail(service) {
+  return `
+    <article class="detail-item">
+      <strong>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))}</strong>
+      <span>${escapeHtml(formatTimeRange(service.start, service.einde))} ${service.locatie ? `- ${escapeHtml(service.locatie)}` : ""}</span>
+      <span>${escapeHtml(formatCodeLabel(service.status || "status onbekend"))}</span>
+      ${service.opmerking ? `<span>${escapeHtml(service.opmerking)}</span>` : ""}
+      ${renderItemButtons("service", service.id)}
+    </article>
+  `;
+}
+
+function renderFamilyDetail(block) {
+  return `
+    <article class="detail-item">
+      <strong>${escapeHtml(formatCodeLabel(block.type || "Gezin"))}</strong>
+      <span>${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+      <span>${block.dekkingNodig ? "Dekking nodig" : "Geen dekking nodig"} - ${escapeHtml(formatCodeLabel(block.hardheid || "onbekend"))}</span>
+      ${block.opmerking ? `<span>${escapeHtml(block.opmerking)}</span>` : ""}
+      ${renderItemButtons("family", block.id)}
+    </article>
+  `;
+}
+
+function renderWishDetail(wish) {
+  return `
+    <article class="detail-item">
+      <strong>${escapeHtml(getPersonLabel(wish.persoonId))}: ${escapeHtml(formatCodeLabel(wish.type || "Wens"))}</strong>
+      <span>Prioriteit: ${escapeHtml(formatCodeLabel(wish.prioriteit || "normaal"))}</span>
+      ${wish.reden ? `<span>${escapeHtml(wish.reden)}</span>` : ""}
+      ${renderItemButtons("wish", wish.id)}
+    </article>
+  `;
+}
+
+function renderAnalysisDetail(result) {
+  return `
+    <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")}">
+      <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
+      ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
+    </article>
+  `;
+}
+
+function renderCompactActionDetail(action) {
+  return `
+    <article class="detail-item">
+      <strong>${escapeHtml(action.titel || "Actie")}</strong>
+      <span>${escapeHtml(formatCodeLabel(action.prioriteit || "normaal"))} - ${escapeHtml(formatCodeLabel(action.status || "open"))}</span>
+      ${action.advies ? `<span>${escapeHtml(action.advies)}</span>` : ""}
+      <div class="action-buttons">${renderActionButtons(action)}</div>
     </article>
   `;
 }
@@ -1016,6 +1142,7 @@ function addService(input) {
   };
 
   state.data.diensten.push(service);
+  state.selectedDate = input.datum;
   runAnalysis(monthId);
   saveData("dienst_toegevoegd");
   showView("cockpit");
@@ -1041,7 +1168,7 @@ function updateService(id, input) {
     opmerking: input.opmerking.trim()
   });
 
-  finishItemMutation(previousMonthId, monthId, "dienst_bijgewerkt");
+  finishItemMutation(previousMonthId, monthId, "dienst_bijgewerkt", input.datum);
 }
 
 function addFamilyBlock(input) {
@@ -1065,6 +1192,7 @@ function addFamilyBlock(input) {
   };
 
   state.data.gezinsVerplichtingen.push(familyBlock);
+  state.selectedDate = input.datum;
   runAnalysis(monthId);
   saveData("gezinsverplichting_toegevoegd");
   showView("cockpit");
@@ -1087,7 +1215,7 @@ function updateFamilyBlock(id, input) {
     opmerking: input.opmerking.trim()
   });
 
-  finishItemMutation(previousMonthId, monthId, "gezinsverplichting_bijgewerkt");
+  finishItemMutation(previousMonthId, monthId, "gezinsverplichting_bijgewerkt", input.datum);
 }
 
 function addWish(input) {
@@ -1109,6 +1237,7 @@ function addWish(input) {
   };
 
   state.data.wensen.push(wish);
+  state.selectedDate = input.datum;
   runAnalysis(monthId);
   saveData("wens_toegevoegd");
   showView("cockpit");
@@ -1129,17 +1258,17 @@ function updateWish(id, input) {
     reden: input.reden.trim()
   });
 
-  finishItemMutation(previousMonthId, monthId, "wens_bijgewerkt");
+  finishItemMutation(previousMonthId, monthId, "wens_bijgewerkt", input.datum);
 }
 
-function finishItemMutation(previousMonthId, monthId, reason) {
+function finishItemMutation(previousMonthId, monthId, reason, selectedDate) {
   state.editing = null;
   if (previousMonthId && previousMonthId !== monthId) {
     runAnalysis(previousMonthId);
   }
   runAnalysis(monthId);
   saveData(reason);
-  openMonth(monthId);
+  openMonth(monthId, selectedDate);
 }
 
 function startEditItem(type, id) {
@@ -1160,12 +1289,23 @@ function startQuickEntry(type, date) {
   state.data.instellingen.actieveMaandId = monthId;
   state.editing = null;
   state.quickEntry = { type, date };
+  state.selectedDate = date;
   showView("quick-entry");
 }
 
 function clearQuickEntry() {
   state.quickEntry = null;
   renderQuickEntry();
+}
+
+function openDay(date) {
+  const monthId = dateToMonthId(date);
+  if (!getMonth(monthId)) return;
+  state.data.instellingen.actieveMaandId = monthId;
+  state.editing = null;
+  state.quickEntry = null;
+  state.selectedDate = date;
+  showView("cockpit");
 }
 
 function deleteScheduleItem(type, id) {
@@ -1503,6 +1643,11 @@ function bindEvents() {
     const actionStatusButton = event.target.closest("[data-action-status]");
     if (actionStatusButton) {
       updateActionStatus(actionStatusButton.dataset.actionId, actionStatusButton.dataset.actionStatus);
+    }
+
+    const openDayButton = event.target.closest("[data-open-day]");
+    if (openDayButton) {
+      openDay(openDayButton.dataset.openDay);
     }
 
     const editButton = event.target.closest("[data-edit-item]");
