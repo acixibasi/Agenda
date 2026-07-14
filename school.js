@@ -1,0 +1,327 @@
+"use strict";
+
+function normalizeSchoolTimes(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((schoolTime) => ({
+      id: schoolTime.id || generateId("schooltijd"),
+      kindId: String(schoolTime.kindId || "alle_kinderen"),
+      dag: WEEKDAY_OPTIONS.some((day) => day.value === String(schoolTime.dag)) ? String(schoolTime.dag) : "1",
+      start: schoolTime.start || "",
+      einde: schoolTime.einde || "",
+      opmerking: String(schoolTime.opmerking || "").trim()
+    }))
+    .filter((schoolTime) => schoolTime.start && schoolTime.einde);
+}
+
+function normalizeChildren(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((child) => ({
+      id: child.id || generateId("kind"),
+      naam: String(child.naam || child.name || "").trim(),
+      schoolNaam: String(child.schoolNaam || child.school || "").trim()
+    }))
+    .filter((child) => child.naam);
+}
+
+function normalizeContextPeriods(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((period) => ({
+      id: period.id || generateId("context"),
+      type: String(period.type || "schoolvakantie").trim(),
+      naam: String(period.naam || period.summary || "").trim(),
+      startDatum: period.startDatum || period.start || "",
+      eindDatum: period.eindDatum || period.einde || period.end || "",
+      bronId: period.bronId || "bron_school_handmatig",
+      opmerking: String(period.opmerking || "").trim()
+    }))
+    .filter((period) => period.naam && period.startDatum && period.eindDatum);
+}
+
+function getChildren() {
+  state.data.kinderen = normalizeChildren(state.data.kinderen);
+  return state.data.kinderen;
+}
+
+function getSchoolTimes() {
+  if (!Array.isArray(state.data.instellingen.schoolTijden)) {
+    state.data.instellingen.schoolTijden = [];
+  }
+  state.data.instellingen.schoolTijden = normalizeSchoolTimes(state.data.instellingen.schoolTijden);
+  return state.data.instellingen.schoolTijden;
+}
+
+function getSchoolPeriods() {
+  state.data.contextPeriodes = normalizeContextPeriods(state.data.contextPeriodes);
+  return state.data.contextPeriodes.filter((period) => ["schoolvakantie", "studiedag"].includes(period.type));
+}
+
+function getWeekdayLabels() {
+  return WEEKDAY_OPTIONS.reduce((labels, day) => {
+    labels[day.value] = day.label;
+    return labels;
+  }, {});
+}
+
+function addChild(input) {
+  const child = {
+    id: generateId("kind"),
+    naam: String(input.naam || "").trim(),
+    schoolNaam: String(input.schoolNaam || "").trim()
+  };
+  if (!child.naam) return;
+  state.data.kinderen = [
+    ...getChildren().filter((item) => item.naam.toLowerCase() !== child.naam.toLowerCase()),
+    child
+  ];
+  saveData("kind_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteChild(id) {
+  state.data.kinderen = getChildren().filter((child) => child.id !== id);
+  state.data.instellingen.schoolTijden = getSchoolTimes().filter((schoolTime) => schoolTime.kindId !== id);
+  saveData("kind_verwijderd");
+  renderSettingsPanel();
+}
+
+function addSchoolTime(input) {
+  const schoolTime = {
+    id: generateId("schooltijd"),
+    kindId: input.kindId || "alle_kinderen",
+    dag: WEEKDAY_OPTIONS.some((day) => day.value === String(input.dag)) ? String(input.dag) : "1",
+    start: input.start || "",
+    einde: input.einde || "",
+    opmerking: String(input.opmerking || "").trim()
+  };
+  if (!schoolTime.start || !schoolTime.einde) return;
+  state.data.instellingen.schoolTijden = [
+    ...getSchoolTimes().filter((item) => getSchoolTimeKey(item) !== getSchoolTimeKey(schoolTime)),
+    schoolTime
+  ];
+  saveData("schooltijd_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteSchoolTime(id) {
+  state.data.instellingen.schoolTijden = getSchoolTimes().filter((schoolTime) => schoolTime.id !== id);
+  saveData("schooltijd_verwijderd");
+  renderSettingsPanel();
+}
+
+function addSchoolPeriod(input) {
+  const period = {
+    id: generateId("context"),
+    type: input.type === "studiedag" ? "studiedag" : "schoolvakantie",
+    naam: String(input.naam || "").trim(),
+    startDatum: input.startDatum || "",
+    eindDatum: input.eindDatum || input.startDatum || "",
+    bronId: "bron_school_handmatig",
+    opmerking: String(input.opmerking || "").trim()
+  };
+  if (!period.naam || !period.startDatum || !period.eindDatum) return;
+  state.data.contextPeriodes = [
+    ...getSchoolPeriods().filter((item) => getSchoolPeriodKey(item) !== getSchoolPeriodKey(period)),
+    period,
+    ...state.data.contextPeriodes.filter((item) => !["schoolvakantie", "studiedag"].includes(item.type))
+  ];
+  rerunAllMonths();
+  saveData("schoolperiode_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteSchoolPeriod(id) {
+  state.data.contextPeriodes = state.data.contextPeriodes.filter((period) => period.id !== id);
+  rerunAllMonths();
+  saveData("schoolperiode_verwijderd");
+  renderSettingsPanel();
+}
+
+function getSchoolTimeKey(schoolTime) {
+  return [schoolTime.kindId, schoolTime.dag, schoolTime.start, schoolTime.einde].join("|");
+}
+
+function getSchoolPeriodKey(period) {
+  return [
+    period.type,
+    String(period.naam || "").trim().toLowerCase(),
+    period.startDatum,
+    period.eindDatum
+  ].join("|");
+}
+
+function getSchoolTimeLabel(schoolTime) {
+  const child = getChildren().find((item) => item.id === schoolTime.kindId);
+  const childLabel = child ? child.naam : "Alle kinderen";
+  const dayLabel = getWeekdayLabels()[schoolTime.dag] || schoolTime.dag;
+  return `${childLabel} - ${dayLabel}`;
+}
+
+function rerunAllMonths() {
+  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+}
+
+function importSchoolIcalFile(file) {
+  if (!file) return;
+  file.text()
+    .then((text) => importSchoolIcalText(text, file.name || "schoolagenda.ics"))
+    .catch(() => window.alert("iCal-bestand kon niet worden gelezen."));
+}
+
+function saveSchoolIcalUrl(input) {
+  state.data.instellingen.schoolIcalUrl = String(input.schoolIcalUrl || "").trim();
+  saveData("school_ical_link_opgeslagen");
+  renderSettingsPanel();
+}
+
+function importSchoolIcalUrl() {
+  const url = String(state.data.instellingen.schoolIcalUrl || "").trim();
+  if (!url) {
+    window.alert("Vul eerst een iCal-link van school in en sla deze op.");
+    return;
+  }
+
+  const fetchUrl = normalizeCalendarUrl(url);
+  const fetchCalendar = window.fetch || fetch;
+  return fetchCalendar(fetchUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    })
+    .then((text) => importSchoolIcalText(text, url))
+    .catch(() => {
+      window.alert("De iCal-link kon niet worden ingelezen. Webcal-links worden automatisch als https geprobeerd, maar vaak blokkeert de schoolserver directe browser-toegang. Download dan het .ics-bestand en gebruik iCal school importeren.");
+    });
+}
+
+function normalizeCalendarUrl(url) {
+  const value = String(url || "").trim();
+  if (value.toLowerCase().startsWith("webcal://")) {
+    return `https://${value.slice(9)}`;
+  }
+  return value;
+}
+
+function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
+  const events = parseIcalEvents(text);
+  let added = 0;
+  let skipped = 0;
+
+  events.forEach((event) => {
+    const period = mapSchoolIcalEventToPeriod(event, sourceName);
+    if (!period) {
+      skipped += 1;
+      return;
+    }
+    if (getSchoolPeriods().some((item) => getSchoolPeriodKey(item) === getSchoolPeriodKey(period))) {
+      skipped += 1;
+      return;
+    }
+    state.data.contextPeriodes.push(period);
+    added += 1;
+  });
+
+  if (added) {
+    rerunAllMonths();
+    saveData("school_ical_geimporteerd");
+    renderSettingsPanel();
+  }
+  window.alert(`${added} vakantie/studiedag item(s) geimporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
+}
+
+function parseIcalEvents(text) {
+  const lines = unfoldIcalLines(String(text || ""));
+  const events = [];
+  let current = null;
+
+  lines.forEach((line) => {
+    if (line === "BEGIN:VEVENT") {
+      current = {};
+      return;
+    }
+    if (line === "END:VEVENT") {
+      if (current) events.push(current);
+      current = null;
+      return;
+    }
+    if (!current || !line.includes(":")) return;
+    const [rawKey, ...valueParts] = line.split(":");
+    const key = rawKey.split(";")[0].toUpperCase();
+    const value = unescapeIcalText(valueParts.join(":"));
+    if (!current[key]) current[key] = value;
+  });
+
+  return events;
+}
+
+function unfoldIcalLines(text) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .reduce((lines, line) => {
+      if (/^[ \t]/.test(line) && lines.length) {
+        lines[lines.length - 1] += line.slice(1);
+      } else {
+        lines.push(line.trimEnd());
+      }
+      return lines;
+    }, []);
+}
+
+function mapSchoolIcalEventToPeriod(event, sourceName) {
+  const summary = String(event.SUMMARY || "Schoolagenda").trim();
+  const type = getSchoolPeriodTypeFromSummary(summary);
+  if (!type) return null;
+  const startDatum = parseIcalDate(event.DTSTART);
+  const rawEnd = parseIcalDate(event.DTEND) || startDatum;
+  if (!startDatum || !rawEnd) return null;
+  const eindDatum = event.DTEND ? previousDateValue(rawEnd) : rawEnd;
+  return {
+    id: generateId("context"),
+    type,
+    naam: summary,
+    startDatum,
+    eindDatum: eindDatum < startDatum ? startDatum : eindDatum,
+    bronId: `bron_school_ical_${slugify(sourceName).slice(0, 24) || "bestand"}`,
+    opmerking: sourceName
+  };
+}
+
+function getSchoolPeriodTypeFromSummary(summary) {
+  const value = summary.toLowerCase();
+  if (value.includes("studiedag") || value.includes("studie dag")) return "studiedag";
+  if (value.includes("vakantie") || value.includes("schoolvrij") || value.includes("vrije dag")) return "schoolvakantie";
+  return null;
+}
+
+function parseIcalDate(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (!match) return "";
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function previousDateValue(dateValue) {
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function unescapeIcalText(value) {
+  return String(value || "")
+    .replaceAll("\\n", " ")
+    .replaceAll("\\,", ",")
+    .replaceAll("\\;", ";")
+    .replaceAll("\\\\", "\\");
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
