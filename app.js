@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.14-lokaal";
+const APP_VERSION = "0.1.15-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -30,8 +30,19 @@ const ACTION_PRIORITY_ORDER = {
 };
 
 const PERSON_LABELS = {
-  persoon_jij: "Jij",
-  persoon_vrouw: "Vrouw"
+  persoon_jij: "Ronald",
+  persoon_vrouw: "Eva"
+};
+
+const DUTY_PERSON_OPTIONS = {
+  persoon_jij: "Ronald",
+  persoon_vrouw: "Eva",
+  beiden: "Beiden"
+};
+
+const CONTRACT_HOURS = {
+  persoon_jij: { weeklyHours: 31.5, monthlyToleranceHours: 9 },
+  persoon_vrouw: { weeklyHours: 27, monthlyToleranceHours: 9 }
 };
 
 const SERVICE_TYPES = [
@@ -46,10 +57,10 @@ const SERVICE_TYPES = [
 ];
 
 const DEFAULT_DUTY_NAMES = [
-  { id: "dienstnaam_vroeg", naam: "Vroeg", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "" },
-  { id: "dienstnaam_dag", naam: "Dag", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "" },
-  { id: "dienstnaam_laat", naam: "Laat", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "" },
-  { id: "dienstnaam_nacht", naam: "Nacht", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "" }
+  { id: "dienstnaam_vroeg", naam: "Vroeg", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "" },
+  { id: "dienstnaam_dag", naam: "Dag", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "" },
+  { id: "dienstnaam_laat", naam: "Laat", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "" },
+  { id: "dienstnaam_nacht", naam: "Nacht", persoonId: "persoon_jij", beschikbaarVanaf: "R2_afstemming", post: "", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "" }
 ];
 
 const SERVICE_STATUSES = [
@@ -173,12 +184,22 @@ function getDefaultDutyNames() {
   return DEFAULT_DUTY_NAMES.map((dutyName) => ({ ...dutyName }));
 }
 
+function getPlanningStageLabels() {
+  return PLANNING_STAGES.reduce((labels, stage) => {
+    labels[stage.value] = stage.label;
+    return labels;
+  }, {});
+}
+
 function normalizeDutyNames(value) {
   const source = Array.isArray(value) ? value : getDefaultDutyNames();
   return source
     .map((dutyName) => ({
       id: dutyName.id || generateId("dienstnaam"),
       naam: String(dutyName.naam || "").trim(),
+      persoonId: DUTY_PERSON_OPTIONS[dutyName.persoonId] ? dutyName.persoonId : "persoon_jij",
+      beschikbaarVanaf: PLANNING_STAGES.some((stage) => stage.value === dutyName.beschikbaarVanaf) ? dutyName.beschikbaarVanaf : "R1_wensen",
+      post: String(dutyName.post || dutyName.locatie || "").trim(),
       dienstType: SERVICE_TYPES.includes(dutyName.dienstType) ? dutyName.dienstType : "overig",
       start: dutyName.start || "",
       einde: dutyName.einde || "",
@@ -1001,12 +1022,12 @@ function renderActionStatusButton(action, status, label) {
   return `<button type="button" class="subtle-button${dangerClass}" data-action-status="${status}" data-action-id="${escapeHtml(action.id)}">${label}</button>`;
 }
 
-function renderDutyNameManager(dutyNames) {
+function renderDutyNameManager(dutyNames, activeStage) {
   const presetButtons = dutyNames.length
     ? dutyNames.map((dutyName) => `
-        <button type="button" class="duty-preset-button" data-apply-duty-name="${escapeHtml(dutyName.id)}">
+        <button type="button" class="duty-preset-button" data-apply-duty-name="${escapeHtml(dutyName.id)}" data-duty-person="${escapeHtml(dutyName.persoonId)}" data-duty-round="${escapeHtml(dutyName.beschikbaarVanaf)}">
           <strong>${escapeHtml(dutyName.naam)}</strong>
-          <span>${escapeHtml(formatCodeLabel(dutyName.dienstType))} ${escapeHtml(formatTimeRange(dutyName.start, dutyName.einde))}</span>
+          <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
         </button>
       `).join("")
     : "<p class=\"muted-text\">Nog geen dienstnamen opgeslagen.</p>";
@@ -1015,7 +1036,7 @@ function renderDutyNameManager(dutyNames) {
     <div class="duty-name-row">
       <div>
         <strong>${escapeHtml(dutyName.naam)}</strong>
-        <span>${escapeHtml(formatCodeLabel(dutyName.dienstType))} - ${escapeHtml(formatTimeRange(dutyName.start, dutyName.einde))}${dutyName.locatie ? ` - ${escapeHtml(dutyName.locatie)}` : ""}</span>
+        <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
       </div>
       <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
     </div>
@@ -1026,10 +1047,27 @@ function renderDutyNameManager(dutyNames) {
       <div class="duty-preset-grid">
         ${presetButtons}
       </div>
+      <p class="muted-text duty-empty-message" data-duty-empty-message>Geen dienstnamen voor deze persoon en ronde.</p>
       <form id="duty-name-form" class="duty-name-form">
         <label>
           Dienstnaam/code
           <input name="naam" type="text" placeholder="Bijv. A, LD, Nacht 8" required>
+        </label>
+        <label>
+          Persoon
+          <select name="persoonId" required>
+            ${renderOptions(Object.keys(DUTY_PERSON_OPTIONS), DUTY_PERSON_OPTIONS, "persoon_jij")}
+          </select>
+        </label>
+        <label>
+          Vanaf ronde
+          <select name="beschikbaarVanaf" required>
+            ${renderOptions(PLANNING_STAGES.map((stage) => stage.value), getPlanningStageLabels(), activeStage || "R1_wensen")}
+          </select>
+        </label>
+        <label>
+          Post
+          <input name="post" type="text" placeholder="Bijv. post noord">
         </label>
         <label>
           Type
@@ -1046,7 +1084,7 @@ function renderDutyNameManager(dutyNames) {
           <input name="einde" type="time" required>
         </label>
         <label>
-          Locatie
+          Locatie/detail
           <input name="locatie" type="text" placeholder="Optioneel">
         </label>
         <button type="submit">Voeg dienstnaam toe</button>
@@ -1054,6 +1092,48 @@ function renderDutyNameManager(dutyNames) {
       ${presetRows ? `<div class="duty-name-list">${presetRows}</div>` : ""}
     </div>
   `;
+}
+
+function getDutyNameMeta(dutyName) {
+  const person = DUTY_PERSON_OPTIONS[dutyName.persoonId] || getPersonLabel(dutyName.persoonId);
+  const stage = getPlanningStageLabels()[dutyName.beschikbaarVanaf] || formatCodeLabel(dutyName.beschikbaarVanaf);
+  const parts = [
+    person,
+    `vanaf ${stage}`,
+    dutyName.post || dutyName.locatie,
+    formatCodeLabel(dutyName.dienstType),
+    formatTimeRange(dutyName.start, dutyName.einde)
+  ].filter(Boolean);
+  return parts.join(" - ");
+}
+
+function updateDutyNameVisibility() {
+  const form = document.getElementById("service-form");
+  const activeMonth = getMonth(state.data.instellingen.actieveMaandId);
+  const activeStage = activeMonth?.planningStage || state.data.instellingen.standaardPlanningStage;
+  const selectedPersonId = form?.elements.persoonId?.value || "persoon_jij";
+  const buttons = Array.from(document.querySelectorAll("[data-apply-duty-name]"));
+  let visibleCount = 0;
+
+  buttons.forEach((button) => {
+    const visible = isDutyNameAvailableFor(button.dataset.dutyPerson, button.dataset.dutyRound, selectedPersonId, activeStage);
+    button.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+
+  const emptyMessage = document.querySelector("[data-duty-empty-message]");
+  if (emptyMessage) emptyMessage.hidden = visibleCount > 0 || !buttons.length;
+}
+
+function isDutyNameAvailableFor(dutyPersonId, dutyStage, selectedPersonId, activeStage) {
+  const personMatches = dutyPersonId === "beiden" || dutyPersonId === selectedPersonId;
+  if (!personMatches) return false;
+  return getPlanningStageIndex(activeStage) >= getPlanningStageIndex(dutyStage);
+}
+
+function getPlanningStageIndex(stageValue) {
+  const index = PLANNING_STAGES.findIndex((stage) => stage.value === stageValue);
+  return index === -1 ? 0 : index;
 }
 
 function renderQuickEntry() {
@@ -1077,6 +1157,7 @@ function renderQuickEntry() {
   const editingFamilyBlock = getEditingItem("family") || {};
   const editingWish = getEditingItem("wish") || {};
   const dutyNames = getDutyNames();
+  const activeStage = month.planningStage || state.data.instellingen.standaardPlanningStage;
   const quickDate = state.quickEntry?.date || "";
   const quickLabel = quickDate ? formatLongDate(quickDate) : "";
   const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
@@ -1097,7 +1178,7 @@ function renderQuickEntry() {
 
       <section class="panel ${state.quickEntry?.type === "service" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "service" ? "Dienst bewerken" : "Dienst toevoegen"}</h3>
-        ${renderDutyNameManager(dutyNames)}
+        ${renderDutyNameManager(dutyNames, activeStage)}
         <form id="service-form" class="form-grid">
           <label>
             Persoon
@@ -1233,6 +1314,7 @@ function renderQuickEntry() {
       </section>
     </div>
   `;
+  updateDutyNameVisibility();
 }
 
 function renderStoragePanel() {
@@ -1468,6 +1550,9 @@ function addDutyName(input) {
   const dutyName = {
     id: generateId("dienstnaam"),
     naam: String(input.naam || "").trim(),
+    persoonId: DUTY_PERSON_OPTIONS[input.persoonId] ? input.persoonId : "persoon_jij",
+    beschikbaarVanaf: PLANNING_STAGES.some((stage) => stage.value === input.beschikbaarVanaf) ? input.beschikbaarVanaf : "R1_wensen",
+    post: String(input.post || "").trim(),
     dienstType: SERVICE_TYPES.includes(input.dienstType) ? input.dienstType : "overig",
     start: input.start || "",
     einde: input.einde || "",
@@ -1477,7 +1562,7 @@ function addDutyName(input) {
   if (!dutyName.naam || !dutyName.start || !dutyName.einde) return;
 
   state.data.instellingen.dienstNamen = [
-    ...getDutyNames().filter((item) => item.naam.toLowerCase() !== dutyName.naam.toLowerCase()),
+    ...getDutyNames().filter((item) => getDutyNameKey(item) !== getDutyNameKey(dutyName)),
     dutyName
   ];
   saveData("dienstnaam_toegevoegd");
@@ -1495,13 +1580,26 @@ function applyDutyName(id) {
   const form = document.getElementById("service-form");
   if (!dutyName || !form) return;
 
+  if (dutyName.persoonId !== "beiden") {
+    form.elements.persoonId.value = dutyName.persoonId;
+  }
   form.elements.dienstCode.value = dutyName.naam;
   form.elements.dienstType.value = dutyName.dienstType;
   form.elements.start.value = dutyName.start;
   form.elements.einde.value = dutyName.einde;
-  if (dutyName.locatie) {
-    form.elements.locatie.value = dutyName.locatie;
+  if (dutyName.post || dutyName.locatie) {
+    form.elements.locatie.value = dutyName.post || dutyName.locatie;
   }
+  updateDutyNameVisibility();
+}
+
+function getDutyNameKey(dutyName) {
+  return [
+    String(dutyName.naam || "").trim().toLowerCase(),
+    dutyName.persoonId || "",
+    dutyName.beschikbaarVanaf || "",
+    String(dutyName.post || "").trim().toLowerCase()
+  ].join("|");
 }
 
 function addFamilyBlock(input) {
@@ -1737,6 +1835,7 @@ function runAnalysis(monthId) {
     ...checkMissingCoverage(context),
     ...checkBothParentsBusy(context),
     ...checkSoftWorktimeNotifications(context),
+    ...checkMonthlyContractHours(context),
     ...checkWishConflicts(context)
   ].map((result) => restoreNotificationStatus(result, preservedNotificationStatuses));
 
@@ -1996,6 +2095,36 @@ function checkSoftWorktimeNotifications(context) {
         }));
       }
     });
+  });
+
+  return results;
+}
+
+function checkMonthlyContractHours(context) {
+  const results = [];
+  const servicesByPerson = groupBy(context.services.filter(isWorkingService), "persoonId");
+
+  Object.entries(CONTRACT_HOURS).forEach(([personId, contract]) => {
+    const services = servicesByPerson[personId] || [];
+    const actualHours = services.reduce((total, service) => total + getServiceDurationHours(service), 0);
+    const targetHours = getMonthlyContractTargetHours(context.month, contract.weeklyHours);
+    const difference = actualHours - targetHours;
+
+    if (Math.abs(difference) <= contract.monthlyToleranceHours) return;
+
+    const direction = difference > 0 ? "meer" : "minder";
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: `${context.monthId}-01`,
+      ernst: "notificatie",
+      categorie: "arbeidstijd_wens",
+      regelId: "notificatie_maanduren_bandbreedte",
+      betrokkenDienstIds: services.map((service) => service.id),
+      betrokkenGezinsVerplichtingId: "",
+      melding: `${getPersonLabel(personId)} staat ${formatHours(Math.abs(difference))} uur ${direction} dan de maandnorm`,
+      advies: `Norm ${formatHours(contract.weeklyHours)} uur/week. Maandnorm ${formatHours(targetHours)} uur, toegestaan ${formatHours(contract.monthlyToleranceHours)} uur meer of minder. Controleer of dit bewust akkoord is.`,
+      signature: `maanduren_${context.monthId}_${personId}_${Math.round(actualHours * 100)}`
+    }));
   });
 
   return results;
@@ -2320,6 +2449,10 @@ function bindEvents() {
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches("#service-form select[name='persoonId']")) {
+      updateDutyNameVisibility();
+    }
+
     if (event.target.matches("[data-backup-file]")) {
       restoreBackup(event.target.files[0]);
       event.target.value = "";
@@ -2416,6 +2549,23 @@ function formatLongDate(value) {
 function formatTimeRange(start, end) {
   if (!start && !end) return "";
   return `${start || "?"}-${end || "?"}`;
+}
+
+function formatHours(value) {
+  return Number(value || 0).toLocaleString("nl-NL", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 1
+  });
+}
+
+function getMonthlyContractTargetHours(month, weeklyHours) {
+  if (!month) return 0;
+  const daysInMonth = new Date(month.jaar, month.maand, 0).getDate();
+  return (weeklyHours * daysInMonth) / 7;
+}
+
+function isWorkingService(service) {
+  return service.dienstType !== "vrij" && getServiceDurationHours(service) > 0;
 }
 
 function serviceDateTime(service, point) {
