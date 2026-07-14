@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.11-lokaal";
+const APP_VERSION = "0.1.12-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -561,12 +561,13 @@ function buildControlSummary(month, days) {
   const conflicts = analyses.filter((item) => item.ernst === "conflict");
   const checks = analyses.filter((item) => ["aandacht", "waarschuwing", "keuze_nodig"].includes(item.ernst));
   const incomplete = analyses.filter((item) => item.ernst === "onvolledig");
+  const notifications = analyses.filter((item) => item.ernst === "notificatie");
   const okDays = days.filter((day) => {
     const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
     const hasProblem = day.analyses.length || day.actions.length;
     return hasContent && !hasProblem;
   });
-  const oordeel = getHardAdviceLabel({ conflicts, checks, incomplete, openActions, month });
+  const oordeel = getHardAdviceLabel({ conflicts, checks, incomplete, notifications, openActions, month });
 
   return {
     month,
@@ -574,6 +575,7 @@ function buildControlSummary(month, days) {
     conflicts,
     checks,
     incomplete,
+    notifications,
     openActions,
     okDays,
     checkedAt: month.laatstBijgewerkt
@@ -584,6 +586,7 @@ function getHardAdviceLabel(summary) {
   if (summary.conflicts.length) return "Actie nodig";
   if (summary.incomplete.length) return "Invoer aanvullen";
   if (summary.checks.length || summary.openActions.length) return "Controleer";
+  if (summary.notifications.length) return "Notificaties bekijken";
   if (summary.month.samenvattingStatus === "goed") return "Kan blijven staan";
   return "Controle beperkt";
 }
@@ -605,6 +608,7 @@ function renderControlCenter(summary) {
       <div class="control-score-grid">
         ${renderControlScore("Conflicten", summary.conflicts.length, "conflict")}
         ${renderControlScore("Te controleren", summary.checks.length, "attention")}
+        ${renderControlScore("Notificaties", summary.notifications.length, "notification")}
         ${renderControlScore("Onvolledig", summary.incomplete.length, "incomplete")}
         ${renderControlScore("Open acties", summary.openActions.length, "actions")}
         ${renderControlScore("Geen probleem", summary.okDays.length, "good")}
@@ -613,6 +617,7 @@ function renderControlCenter(summary) {
       <div class="control-columns">
         ${renderControlSection("Conflicten", summary.conflicts, "Geen harde conflicten.", "conflict")}
         ${renderControlSection("Te controleren", summary.checks, "Geen controlepunten.", "attention")}
+        ${renderControlSection("Notificaties", summary.notifications, "Geen zachte notificaties.", "notification")}
         ${renderControlSection("Onvolledig", summary.incomplete, "Geen ontbrekende basisgegevens.", "incomplete")}
         ${renderOkDays(summary.okDays)}
       </div>
@@ -643,7 +648,7 @@ function renderControlFinding(result) {
     <article class="control-finding control-finding-link" data-open-day="${escapeHtml(result.datum)}" role="button" tabindex="0">
       <span class="day-link-label">Ga naar dag: ${escapeHtml(formatLongDate(result.datum))}</span>
       <strong>${escapeHtml(result.melding || "Controlepunt")}</strong>
-      ${result.advies ? `<span>Hard advies: ${escapeHtml(result.advies)}</span>` : ""}
+      ${result.advies ? `<span>${result.ernst === "notificatie" ? "Notificatie" : "Hard advies"}: ${escapeHtml(result.advies)}</span>` : ""}
     </article>
   `;
 }
@@ -1511,7 +1516,9 @@ function runAnalysis(monthId) {
     ...checkInvalidTimes(context),
     ...checkOverlappingServicesForSamePerson(context),
     ...checkMissingCoverage(context),
-    ...checkBothParentsBusy(context)
+    ...checkBothParentsBusy(context),
+    ...checkSoftWorktimeNotifications(context),
+    ...checkWishConflicts(context)
   ];
 
   state.data.analyseResultaten.push(...results);
@@ -1525,6 +1532,7 @@ function buildAnalysisContext(monthId) {
     month: getMonth(monthId),
     services: getMonthItems(monthId, "diensten"),
     familyBlocks: getMonthItems(monthId, "gezinsVerplichtingen"),
+    wishes: getMonthItems(monthId, "wensen"),
     analyses: getMonthItems(monthId, "analyseResultaten"),
     actions: getMonthItems(monthId, "actieItems")
   };
@@ -1703,6 +1711,87 @@ function checkBothParentsBusy(context) {
       });
     });
   });
+
+  return results;
+}
+
+function checkSoftWorktimeNotifications(context) {
+  const results = [];
+  const servicesByPerson = groupBy(context.services, "persoonId");
+
+  Object.entries(servicesByPerson).forEach(([personId, services]) => {
+    const sortedServices = services
+      .filter((service) => serviceDateTime(service, "start") && serviceDateTime(service, "end"))
+      .sort((a, b) => serviceDateTime(a, "start") - serviceDateTime(b, "start"));
+
+    sortedServices.forEach((service) => {
+      const durationHours = getServiceDurationHours(service);
+      if (durationHours > 10) {
+        results.push(createAnalysisResult({
+          monthId: context.monthId,
+          datum: service.datum,
+          ernst: "notificatie",
+          categorie: "arbeidstijd_wens",
+          regelId: "notificatie_lange_dienst",
+          betrokkenDienstIds: [service.id],
+          betrokkenGezinsVerplichtingId: "",
+          melding: `${getPersonLabel(personId)} heeft een lange dienst op ${formatLongDate(service.datum)}`,
+          advies: "Controleer of deze lange dienst bewust akkoord is; werkgeverrooster blijft leidend.",
+          signature: `lange_dienst_${service.id}`
+        }));
+      }
+    });
+
+    sortedServices.forEach((service, index) => {
+      const nextService = sortedServices[index + 1];
+      if (!nextService) return;
+      const restHours = (serviceDateTime(nextService, "start") - serviceDateTime(service, "end")) / 36e5;
+      if (restHours >= 0 && restHours < 11) {
+        results.push(createAnalysisResult({
+          monthId: context.monthId,
+          datum: nextService.datum,
+          ernst: "notificatie",
+          categorie: "arbeidstijd_wens",
+          regelId: "notificatie_korte_rust",
+          betrokkenDienstIds: [service.id, nextService.id],
+          betrokkenGezinsVerplichtingId: "",
+          melding: `${getPersonLabel(personId)} heeft korte rust voor ${formatLongDate(nextService.datum)}`,
+          advies: "Controleer of deze korte rust bewust akkoord is; dit is geen harde blokkade in deze app.",
+          signature: `korte_rust_${service.id}_${nextService.id}`
+        }));
+      }
+    });
+  });
+
+  return results;
+}
+
+function checkWishConflicts(context) {
+  const results = [];
+
+  context.wishes
+    .filter((wish) => ["liever_geen_dienst", "liefst_vrij", "samen_vrij"].includes(wish.type))
+    .forEach((wish) => {
+      const services = context.services.filter((service) => {
+        if (service.datum !== wish.datum) return false;
+        if (wish.type === "samen_vrij") return true;
+        return service.persoonId === wish.persoonId;
+      });
+      if (!services.length) return;
+
+      results.push(createAnalysisResult({
+        monthId: context.monthId,
+        datum: wish.datum,
+        ernst: "notificatie",
+        categorie: "wens",
+        regelId: "notificatie_wens_botst",
+        betrokkenDienstIds: services.map((service) => service.id),
+        betrokkenGezinsVerplichtingId: "",
+        melding: `Wens botst met geplande dienst op ${formatLongDate(wish.datum)}`,
+        advies: "Controleer of deze wens bewust vervalt of dat de invoer/planning aangepast moet worden.",
+        signature: `wens_botst_${wish.id}_${services.map((service) => service.id).join("_")}`
+      }));
+    });
 
   return results;
 }
@@ -2044,6 +2133,26 @@ function formatLongDate(value) {
 function formatTimeRange(start, end) {
   if (!start && !end) return "";
   return `${start || "?"}-${end || "?"}`;
+}
+
+function serviceDateTime(service, point) {
+  const time = point === "end" ? service.einde : service.start;
+  const minutes = timeToMinutes(time);
+  if (!service.datum || minutes === null) return null;
+  const date = new Date(`${service.datum}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setMinutes(minutes);
+  if (point === "end" && timeToMinutes(service.einde) <= timeToMinutes(service.start)) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
+
+function getServiceDurationHours(service) {
+  const start = serviceDateTime(service, "start");
+  const end = serviceDateTime(service, "end");
+  if (!start || !end) return 0;
+  return (end - start) / 36e5;
 }
 
 function isValidTimeRange(start, end) {

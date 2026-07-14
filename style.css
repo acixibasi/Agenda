@@ -411,7 +411,7 @@ textarea {
 .control-score-grid {
   display: grid;
   gap: 8px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   margin-bottom: 14px;
 }
 
@@ -442,6 +442,11 @@ textarea {
 .control-score-attention {
   background: var(--attention);
   color: var(--attention-text);
+}
+
+.control-score-notification {
+  background: #f0ecff;
+  color: #4c3b88;
 }
 
 .control-score-incomplete {
@@ -703,7 +708,8 @@ textarea {
 }
 
 .detail-item-aandacht,
-.detail-item-waarschuwing {
+.detail-item-waarschuwing,
+.detail-item-notificatie {
   background: var(--attention);
   border-color: #f0c36d;
   color: var(--attention-text);
@@ -718,7 +724,8 @@ textarea {
 }
 
 .signal-aandacht,
-.signal-waarschuwing {
+.signal-waarschuwing,
+.signal-notificatie {
   border-color: #f0c36d;
   background: var(--attention);
   color: var(--attention-text);
