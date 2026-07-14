@@ -497,6 +497,25 @@ textarea {
   text-decoration: underline;
 }
 
+.control-finding-link {
+  cursor: pointer;
+}
+
+.control-finding-link:hover {
+  border-color: var(--brand);
+  background: #eef4ff;
+}
+
+.control-finding-link:focus {
+  outline: 3px solid rgba(31, 111, 235, 0.24);
+  outline-offset: 2px;
+}
+
+.day-link-label {
+  color: var(--brand);
+  font-weight: 700;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }

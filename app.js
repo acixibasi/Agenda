@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.9-lokaal";
+const APP_VERSION = "0.1.10-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -638,8 +638,8 @@ function renderControlSection(title, analyses, emptyText, type) {
 
 function renderControlFinding(result) {
   return `
-    <article class="control-finding">
-      <button type="button" class="link-button" data-open-day="${escapeHtml(result.datum)}">${escapeHtml(formatLongDate(result.datum))}</button>
+    <article class="control-finding control-finding-link" data-open-day="${escapeHtml(result.datum)}" role="button" tabindex="0">
+      <span class="day-link-label">Ga naar dag: ${escapeHtml(formatLongDate(result.datum))}</span>
       <strong>${escapeHtml(result.melding || "Controlepunt")}</strong>
       ${result.advies ? `<span>Hard advies: ${escapeHtml(result.advies)}</span>` : ""}
     </article>
@@ -652,8 +652,8 @@ function renderOkDays(days) {
     <div class="control-section control-section-good">
       <h4>Geen probleem</h4>
       ${visibleDays.length ? visibleDays.map((day) => `
-        <article class="control-finding">
-          <button type="button" class="link-button" data-open-day="${escapeHtml(day.date)}">${escapeHtml(formatLongDate(day.date))}</button>
+        <article class="control-finding control-finding-link" data-open-day="${escapeHtml(day.date)}" role="button" tabindex="0">
+          <span class="day-link-label">Ga naar dag: ${escapeHtml(formatLongDate(day.date))}</span>
           <span>Invoer aanwezig, geen open controlepunt.</span>
         </article>
       `).join("") : "<p class=\"muted-text\">Nog geen dag zonder aandachtspunt.</p>"}
@@ -1935,6 +1935,13 @@ function bindEvents() {
       restoreBackup(event.target.files[0]);
       event.target.value = "";
     }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const openDayTarget = event.target.closest("[data-open-day]");
+    if (!openDayTarget || !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    openDay(openDayTarget.dataset.openDay);
   });
 }
 
