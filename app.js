@@ -53,6 +53,9 @@ function normalizeData(raw) {
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
+  normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
+  normalized.kinderen = normalizeChildren(normalized.kinderen);
+  normalized.contextPeriodes = normalizeContextPeriods(normalized.contextPeriodes);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
   normalized.wijzigingsLog = Array.isArray(incoming.wijzigingsLog) ? incoming.wijzigingsLog : [];
   normalized.dataVersion = Number(incoming.dataVersion) || DATA_VERSION;
@@ -128,6 +131,46 @@ function normalizeFamilyTemplates(value) {
       opmerking: String(template.opmerking || "").trim()
     }))
     .filter((template) => template.naam);
+}
+
+function normalizeSchoolTimes(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((schoolTime) => ({
+      id: schoolTime.id || generateId("schooltijd"),
+      kindId: String(schoolTime.kindId || "alle_kinderen"),
+      dag: WEEKDAY_OPTIONS.some((day) => day.value === String(schoolTime.dag)) ? String(schoolTime.dag) : "1",
+      start: schoolTime.start || "",
+      einde: schoolTime.einde || "",
+      opmerking: String(schoolTime.opmerking || "").trim()
+    }))
+    .filter((schoolTime) => schoolTime.start && schoolTime.einde);
+}
+
+function normalizeChildren(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((child) => ({
+      id: child.id || generateId("kind"),
+      naam: String(child.naam || child.name || "").trim(),
+      schoolNaam: String(child.schoolNaam || child.school || "").trim()
+    }))
+    .filter((child) => child.naam);
+}
+
+function normalizeContextPeriods(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((period) => ({
+      id: period.id || generateId("context"),
+      type: String(period.type || "schoolvakantie").trim(),
+      naam: String(period.naam || period.summary || "").trim(),
+      startDatum: period.startDatum || period.start || "",
+      eindDatum: period.eindDatum || period.einde || period.end || "",
+      bronId: period.bronId || "bron_school_handmatig",
+      opmerking: String(period.opmerking || "").trim()
+    }))
+    .filter((period) => period.naam && period.startDatum && period.eindDatum);
 }
 
 function loadData() {
@@ -1077,6 +1120,9 @@ function renderSettingsPanel() {
   const dutyNames = getDutyNames();
   const familyTemplates = getFamilyTemplates();
   const contractHours = getContractHours();
+  const children = getChildren();
+  const schoolTimes = getSchoolTimes();
+  const schoolPeriods = getSchoolPeriods();
   const editingDutyName = getEditingDutyName();
   const editingFamilyTemplate = getEditingFamilyTemplate();
   const dutyRows = dutyNames.length
@@ -1107,6 +1153,45 @@ function renderSettingsPanel() {
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen vaste gezinsmomenten ingesteld.</div>";
+  const childRows = children.length
+    ? children.map((child) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(child.naam)}</strong>
+            <span>${escapeHtml(child.schoolNaam || "Geen schoolnaam")}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-delete-child="${escapeHtml(child.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen kinderen ingesteld.</div>";
+  const schoolTimeRows = schoolTimes.length
+    ? schoolTimes.map((schoolTime) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(getSchoolTimeLabel(schoolTime))}</strong>
+            <span>${escapeHtml(formatTimeRange(schoolTime.start, schoolTime.einde))}${schoolTime.opmerking ? ` - ${escapeHtml(schoolTime.opmerking)}` : ""}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-delete-school-time="${escapeHtml(schoolTime.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen schooltijden ingesteld.</div>";
+  const schoolPeriodRows = schoolPeriods.length
+    ? schoolPeriods.map((period) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(period.naam)}</strong>
+            <span>${escapeHtml(formatCodeLabel(period.type))}: ${escapeHtml(formatDateRange(period.startDatum, period.eindDatum))}${period.bronId ? ` - ${escapeHtml(formatCodeLabel(period.bronId))}` : ""}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-delete-school-period="${escapeHtml(period.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen vakanties of studiedagen ingesteld.</div>";
 
   panel.innerHTML = `
     <section class="panel">
@@ -1157,6 +1242,105 @@ function renderSettingsPanel() {
       ${renderSettingsFamilyTemplateForm(editingFamilyTemplate)}
       <div class="duty-name-list settings-duty-list">
         ${familyTemplateRows}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Schoolbeheer</p>
+      <div class="storage-list">
+        <div class="storage-row"><span>Kinderen</span><strong>${children.length}</strong></div>
+        <div class="storage-row"><span>Schooltijden</span><strong>${schoolTimes.length}</strong></div>
+        <div class="storage-row"><span>Vakanties/studiedagen</span><strong>${schoolPeriods.length}</strong></div>
+      </div>
+
+      <h3 class="subsection-title">Kinderen</h3>
+      <form id="child-form" class="duty-name-form settings-duty-form">
+        <label>
+          Naam kind
+          <input name="naam" type="text" placeholder="Bijv. kind 1" required>
+        </label>
+        <label>
+          School
+          <input name="schoolNaam" type="text" placeholder="Bijv. basisschool">
+        </label>
+        <div class="form-actions">
+          <button type="submit">Kind toevoegen</button>
+        </div>
+      </form>
+      <div class="duty-name-list settings-duty-list">
+        ${childRows}
+      </div>
+
+      <h3 class="subsection-title">Schooltijden</h3>
+      <form id="school-time-form" class="duty-name-form settings-duty-form">
+        <label>
+          Kind
+          <select name="kindId">
+            <option value="alle_kinderen">Alle kinderen</option>
+            ${children.map((child) => `<option value="${escapeHtml(child.id)}">${escapeHtml(child.naam)}</option>`).join("")}
+          </select>
+        </label>
+        <label>
+          Dag
+          <select name="dag" required>
+            ${renderOptions(WEEKDAY_OPTIONS.map((day) => day.value), getWeekdayLabels(), "1")}
+          </select>
+        </label>
+        <label>
+          Start school
+          <input name="start" type="time" required>
+        </label>
+        <label>
+          Einde school
+          <input name="einde" type="time" required>
+        </label>
+        <label class="full-width">
+          Opmerking
+          <input name="opmerking" type="text" placeholder="Bijv. continurooster, korte dag">
+        </label>
+        <div class="form-actions">
+          <button type="submit">Schooltijd toevoegen</button>
+        </div>
+      </form>
+      <div class="duty-name-list settings-duty-list">
+        ${schoolTimeRows}
+      </div>
+
+      <h3 class="subsection-title">Vakanties en studiedagen</h3>
+      <form id="school-period-form" class="duty-name-form settings-duty-form">
+        <label>
+          Type
+          <select name="type" required>
+            <option value="schoolvakantie">Schoolvakantie</option>
+            <option value="studiedag">Studiedag</option>
+          </select>
+        </label>
+        <label>
+          Naam
+          <input name="naam" type="text" placeholder="Bijv. herfstvakantie" required>
+        </label>
+        <label>
+          Startdatum
+          <input name="startDatum" type="date" required>
+        </label>
+        <label>
+          Einddatum
+          <input name="eindDatum" type="date" required>
+        </label>
+        <label class="full-width">
+          Opmerking
+          <input name="opmerking" type="text" placeholder="Optioneel">
+        </label>
+        <div class="form-actions full-width">
+          <button type="submit">Periode toevoegen</button>
+          <label class="file-button subtle-file-button">
+            iCal school importeren
+            <input type="file" accept=".ics,.ical,text/calendar" data-school-ical-file>
+          </label>
+        </div>
+      </form>
+      <div class="duty-name-list settings-duty-list">
+        ${schoolPeriodRows}
       </div>
     </section>
 
@@ -1936,6 +2120,258 @@ function getFamilyTemplates() {
   }
   state.data.instellingen.gezinsSjablonen = normalizeFamilyTemplates(state.data.instellingen.gezinsSjablonen);
   return state.data.instellingen.gezinsSjablonen;
+}
+
+function getChildren() {
+  state.data.kinderen = normalizeChildren(state.data.kinderen);
+  return state.data.kinderen;
+}
+
+function getSchoolTimes() {
+  if (!Array.isArray(state.data.instellingen.schoolTijden)) {
+    state.data.instellingen.schoolTijden = [];
+  }
+  state.data.instellingen.schoolTijden = normalizeSchoolTimes(state.data.instellingen.schoolTijden);
+  return state.data.instellingen.schoolTijden;
+}
+
+function getSchoolPeriods() {
+  state.data.contextPeriodes = normalizeContextPeriods(state.data.contextPeriodes);
+  return state.data.contextPeriodes.filter((period) => ["schoolvakantie", "studiedag"].includes(period.type));
+}
+
+function getWeekdayLabels() {
+  return WEEKDAY_OPTIONS.reduce((labels, day) => {
+    labels[day.value] = day.label;
+    return labels;
+  }, {});
+}
+
+function addChild(input) {
+  const child = {
+    id: generateId("kind"),
+    naam: String(input.naam || "").trim(),
+    schoolNaam: String(input.schoolNaam || "").trim()
+  };
+  if (!child.naam) return;
+  state.data.kinderen = [
+    ...getChildren().filter((item) => item.naam.toLowerCase() !== child.naam.toLowerCase()),
+    child
+  ];
+  saveData("kind_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteChild(id) {
+  state.data.kinderen = getChildren().filter((child) => child.id !== id);
+  state.data.instellingen.schoolTijden = getSchoolTimes().filter((schoolTime) => schoolTime.kindId !== id);
+  saveData("kind_verwijderd");
+  renderSettingsPanel();
+}
+
+function addSchoolTime(input) {
+  const schoolTime = {
+    id: generateId("schooltijd"),
+    kindId: input.kindId || "alle_kinderen",
+    dag: WEEKDAY_OPTIONS.some((day) => day.value === String(input.dag)) ? String(input.dag) : "1",
+    start: input.start || "",
+    einde: input.einde || "",
+    opmerking: String(input.opmerking || "").trim()
+  };
+  if (!schoolTime.start || !schoolTime.einde) return;
+  state.data.instellingen.schoolTijden = [
+    ...getSchoolTimes().filter((item) => getSchoolTimeKey(item) !== getSchoolTimeKey(schoolTime)),
+    schoolTime
+  ];
+  saveData("schooltijd_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteSchoolTime(id) {
+  state.data.instellingen.schoolTijden = getSchoolTimes().filter((schoolTime) => schoolTime.id !== id);
+  saveData("schooltijd_verwijderd");
+  renderSettingsPanel();
+}
+
+function addSchoolPeriod(input) {
+  const period = {
+    id: generateId("context"),
+    type: input.type === "studiedag" ? "studiedag" : "schoolvakantie",
+    naam: String(input.naam || "").trim(),
+    startDatum: input.startDatum || "",
+    eindDatum: input.eindDatum || input.startDatum || "",
+    bronId: "bron_school_handmatig",
+    opmerking: String(input.opmerking || "").trim()
+  };
+  if (!period.naam || !period.startDatum || !period.eindDatum) return;
+  state.data.contextPeriodes = [
+    ...getSchoolPeriods().filter((item) => getSchoolPeriodKey(item) !== getSchoolPeriodKey(period)),
+    period,
+    ...state.data.contextPeriodes.filter((item) => !["schoolvakantie", "studiedag"].includes(item.type))
+  ];
+  rerunAllMonths();
+  saveData("schoolperiode_toegevoegd");
+  renderSettingsPanel();
+}
+
+function deleteSchoolPeriod(id) {
+  state.data.contextPeriodes = state.data.contextPeriodes.filter((period) => period.id !== id);
+  rerunAllMonths();
+  saveData("schoolperiode_verwijderd");
+  renderSettingsPanel();
+}
+
+function getSchoolTimeKey(schoolTime) {
+  return [schoolTime.kindId, schoolTime.dag, schoolTime.start, schoolTime.einde].join("|");
+}
+
+function getSchoolPeriodKey(period) {
+  return [
+    period.type,
+    String(period.naam || "").trim().toLowerCase(),
+    period.startDatum,
+    period.eindDatum
+  ].join("|");
+}
+
+function getSchoolTimeLabel(schoolTime) {
+  const child = getChildren().find((item) => item.id === schoolTime.kindId);
+  const childLabel = child ? child.naam : "Alle kinderen";
+  const dayLabel = getWeekdayLabels()[schoolTime.dag] || schoolTime.dag;
+  return `${childLabel} - ${dayLabel}`;
+}
+
+function rerunAllMonths() {
+  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+}
+
+function importSchoolIcalFile(file) {
+  if (!file) return;
+  file.text()
+    .then((text) => importSchoolIcalText(text, file.name || "schoolagenda.ics"))
+    .catch(() => window.alert("iCal-bestand kon niet worden gelezen."));
+}
+
+function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
+  const events = parseIcalEvents(text);
+  let added = 0;
+  let skipped = 0;
+
+  events.forEach((event) => {
+    const period = mapSchoolIcalEventToPeriod(event, sourceName);
+    if (!period) {
+      skipped += 1;
+      return;
+    }
+    if (getSchoolPeriods().some((item) => getSchoolPeriodKey(item) === getSchoolPeriodKey(period))) {
+      skipped += 1;
+      return;
+    }
+    state.data.contextPeriodes.push(period);
+    added += 1;
+  });
+
+  if (added) {
+    rerunAllMonths();
+    saveData("school_ical_geimporteerd");
+    renderSettingsPanel();
+  }
+  window.alert(`${added} vakantie/studiedag item(s) geïmporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
+}
+
+function parseIcalEvents(text) {
+  const lines = unfoldIcalLines(String(text || ""));
+  const events = [];
+  let current = null;
+
+  lines.forEach((line) => {
+    if (line === "BEGIN:VEVENT") {
+      current = {};
+      return;
+    }
+    if (line === "END:VEVENT") {
+      if (current) events.push(current);
+      current = null;
+      return;
+    }
+    if (!current || !line.includes(":")) return;
+    const [rawKey, ...valueParts] = line.split(":");
+    const key = rawKey.split(";")[0].toUpperCase();
+    const value = unescapeIcalText(valueParts.join(":"));
+    if (!current[key]) current[key] = value;
+  });
+
+  return events;
+}
+
+function unfoldIcalLines(text) {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .reduce((lines, line) => {
+      if (/^[ \t]/.test(line) && lines.length) {
+        lines[lines.length - 1] += line.slice(1);
+      } else {
+        lines.push(line.trimEnd());
+      }
+      return lines;
+    }, []);
+}
+
+function mapSchoolIcalEventToPeriod(event, sourceName) {
+  const summary = String(event.SUMMARY || "Schoolagenda").trim();
+  const type = getSchoolPeriodTypeFromSummary(summary);
+  if (!type) return null;
+  const startDatum = parseIcalDate(event.DTSTART);
+  const rawEnd = parseIcalDate(event.DTEND) || startDatum;
+  if (!startDatum || !rawEnd) return null;
+  const eindDatum = event.DTEND ? previousDateValue(rawEnd) : rawEnd;
+  return {
+    id: generateId("context"),
+    type,
+    naam: summary,
+    startDatum,
+    eindDatum: eindDatum < startDatum ? startDatum : eindDatum,
+    bronId: `bron_school_ical_${slugify(sourceName).slice(0, 24) || "bestand"}`,
+    opmerking: sourceName
+  };
+}
+
+function getSchoolPeriodTypeFromSummary(summary) {
+  const value = summary.toLowerCase();
+  if (value.includes("studiedag") || value.includes("studie dag")) return "studiedag";
+  if (value.includes("vakantie") || value.includes("schoolvrij") || value.includes("vrije dag")) return "schoolvakantie";
+  return null;
+}
+
+function parseIcalDate(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})/);
+  if (!match) return "";
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function previousDateValue(dateValue) {
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return dateValue;
+  date.setDate(date.getDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function unescapeIcalText(value) {
+  return String(value || "")
+    .replaceAll("\\n", " ")
+    .replaceAll("\\,", ",")
+    .replaceAll("\\;", ";")
+    .replaceAll("\\\\", "\\");
+}
+
+function slugify(value) {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
 function updateContractHours(input) {
@@ -3020,6 +3456,24 @@ function bindEvents() {
       return;
     }
 
+    const deleteChildButton = event.target.closest("[data-delete-child]");
+    if (deleteChildButton) {
+      deleteChild(deleteChildButton.dataset.deleteChild);
+      return;
+    }
+
+    const deleteSchoolTimeButton = event.target.closest("[data-delete-school-time]");
+    if (deleteSchoolTimeButton) {
+      deleteSchoolTime(deleteSchoolTimeButton.dataset.deleteSchoolTime);
+      return;
+    }
+
+    const deleteSchoolPeriodButton = event.target.closest("[data-delete-school-period]");
+    if (deleteSchoolPeriodButton) {
+      deleteSchoolPeriod(deleteSchoolPeriodButton.dataset.deleteSchoolPeriod);
+      return;
+    }
+
     if (event.target.closest("[data-cancel-duty-edit]")) {
       cancelEditDutyName();
       return;
@@ -3108,6 +3562,27 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.id === "child-form") {
+      event.preventDefault();
+      addChild(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "school-time-form") {
+      event.preventDefault();
+      addSchoolTime(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "school-period-form") {
+      event.preventDefault();
+      addSchoolPeriod(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
     if (event.target.id === "service-form") {
       event.preventDefault();
       addService(formToObject(event.target));
@@ -3140,6 +3615,11 @@ function bindEvents() {
 
     if (event.target.matches("[data-backup-file]")) {
       restoreBackup(event.target.files[0]);
+      event.target.value = "";
+    }
+
+    if (event.target.matches("[data-school-ical-file]")) {
+      importSchoolIcalFile(event.target.files[0]);
       event.target.value = "";
     }
   });
@@ -3238,6 +3718,12 @@ function formatLongDate(value) {
     day: "numeric",
     month: "short"
   }).format(date);
+}
+
+function formatDateRange(start, end) {
+  if (!start && !end) return "";
+  if (!end || start === end) return formatLongDate(start);
+  return `${formatLongDate(start)} t/m ${formatLongDate(end)}`;
 }
 
 function formatTimeRange(start, end) {
