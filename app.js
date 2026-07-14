@@ -1076,64 +1076,15 @@ function renderDutyNameManager(dutyNames, activeStage) {
       `).join("")
     : "<p class=\"muted-text\">Nog geen dienstnamen opgeslagen.</p>";
 
-  const presetRows = dutyNames.map((dutyName) => `
-    <div class="duty-name-row">
-      <div>
-        <strong>${escapeHtml(dutyName.naam)}</strong>
-        <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
-      </div>
-      <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
-    </div>
-  `).join("");
-
   return `
     <div class="duty-name-manager">
       <div class="duty-preset-grid">
         ${presetButtons}
       </div>
       <p class="muted-text duty-empty-message" data-duty-empty-message>Geen dienstnamen voor deze persoon en ronde.</p>
-      <form id="duty-name-form" class="duty-name-form">
-        <label>
-          Dienstnaam/code
-          <input name="naam" type="text" placeholder="Bijv. A, LD, Nacht 8" required>
-        </label>
-        <label>
-          Persoon
-          <select name="persoonId" required>
-            ${renderOptions(Object.keys(DUTY_PERSON_OPTIONS), DUTY_PERSON_OPTIONS, "persoon_jij")}
-          </select>
-        </label>
-        <label>
-          Vanaf ronde
-          <select name="beschikbaarVanaf" required>
-            ${renderOptions(PLANNING_STAGES.map((stage) => stage.value), getPlanningStageLabels(), activeStage || "R1_wensen")}
-          </select>
-        </label>
-        <label>
-          Post
-          <input name="post" type="text" placeholder="Bijv. post noord">
-        </label>
-        <label>
-          Type
-          <select name="dienstType" required>
-            ${renderOptions(SERVICE_TYPES, null, "overig")}
-          </select>
-        </label>
-        <label>
-          Start
-          <input name="start" type="time" required>
-        </label>
-        <label>
-          Einde
-          <input name="einde" type="time" required>
-        </label>
-        <label>
-          Locatie/detail
-          <input name="locatie" type="text" placeholder="Optioneel">
-        </label>
-        <button type="submit">Voeg dienstnaam toe</button>
-      </form>
-      ${presetRows ? `<div class="duty-name-list">${presetRows}</div>` : ""}
+      <div class="toolbar">
+        <button type="button" class="subtle-button" data-view-target="settings">Beheer dienstkeuzes</button>
+      </div>
     </div>
   `;
 }
@@ -2501,13 +2452,6 @@ function bindEvents() {
     }
 
     if (event.target.id === "settings-duty-name-form") {
-      event.preventDefault();
-      addDutyName(formToObject(event.target));
-      event.target.reset();
-      return;
-    }
-
-    if (event.target.id === "duty-name-form") {
       event.preventDefault();
       addDutyName(formToObject(event.target));
       event.target.reset();
