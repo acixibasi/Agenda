@@ -321,6 +321,24 @@ textarea {
   margin-top: 10px;
 }
 
+.action-history {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.subsection-title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.action-meta {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }

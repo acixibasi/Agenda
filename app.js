@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.3-lokaal";
+const APP_VERSION = "0.1.4-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -255,6 +255,17 @@ function getOpenActions(monthId) {
   }).sort(sortActions);
 }
 
+function getClosedActions(monthId) {
+  return state.data.actieItems.filter((action) => {
+    const inMonth = !monthId || action.maandPlanningId === monthId;
+    return inMonth && isClosedAction(action);
+  }).sort(sortActions);
+}
+
+function isClosedAction(action) {
+  return ["opgelost", "genegeerd"].includes(action.status);
+}
+
 function sortActions(a, b) {
   const priorityDiff = (ACTION_PRIORITY_ORDER[a.prioriteit] ?? 9) - (ACTION_PRIORITY_ORDER[b.prioriteit] ?? 9);
   if (priorityDiff !== 0) return priorityDiff;
@@ -346,6 +357,7 @@ function renderMonthCockpit() {
   const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
   const analyses = getVisibleAnalyses(month.id);
   const actions = getOpenActions(month.id);
+  const closedActions = getClosedActions(month.id);
   const days = buildMonthDays(month);
 
   content.innerHTML = `
@@ -370,6 +382,12 @@ function renderMonthCockpit() {
       <section class="panel">
         <p class="eyebrow">Actiestrook</p>
         ${actions.length ? actions.map(renderActionCard).join("") : "<p>Geen open acties voor deze maand.</p>"}
+        ${closedActions.length ? `
+          <div class="action-history">
+            <h3 class="subsection-title">Afgehandeld deze maand</h3>
+            ${closedActions.map(renderActionCard).join("")}
+          </div>
+        ` : ""}
       </section>
 
       <section class="panel">
@@ -422,15 +440,22 @@ function renderDayRow(day) {
 function renderActionList() {
   const list = document.getElementById("action-list");
   const actions = getOpenActions();
-  if (!actions.length) {
-    list.innerHTML = "<div class=\"empty-state\">Er zijn nog geen open acties.</div>";
-    return;
-  }
+  const closedActions = getClosedActions();
 
-  list.innerHTML = actions.map(renderActionCard).join("");
+  list.innerHTML = `
+    <section class="panel">
+      <p class="eyebrow">Open</p>
+      ${actions.length ? actions.map(renderActionCard).join("") : "<div class=\"empty-state\">Er zijn geen open acties.</div>"}
+    </section>
+    <section class="panel">
+      <p class="eyebrow">Afgehandeld</p>
+      ${closedActions.length ? closedActions.map(renderActionCard).join("") : "<div class=\"empty-state\">Er zijn nog geen afgehandelde acties.</div>"}
+    </section>
+  `;
 }
 
 function renderActionCard(action) {
+  const statusMeta = action.laatstBijgewerkt ? `<p class="action-meta">Bijgewerkt: ${escapeHtml(formatDateTime(action.laatstBijgewerkt))}</p>` : "";
   return `
     <article class="action-card action-status-${escapeHtml(action.status || "open")}">
       <h3>${escapeHtml(action.titel || "Actie")}</h3>
@@ -438,13 +463,24 @@ function renderActionCard(action) {
       ${action.deadline ? `<p>Deadline: ${escapeHtml(formatLongDate(action.deadline))}</p>` : ""}
       ${action.advies ? `<p>${escapeHtml(action.advies)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
+      ${statusMeta}
       <div class="action-buttons">
-        ${renderActionStatusButton(action, "bezig", "Zet bezig")}
-        ${renderActionStatusButton(action, "wacht_op_ander", "Wacht op ander")}
-        ${renderActionStatusButton(action, "opgelost", "Markeer opgelost")}
-        ${renderActionStatusButton(action, "genegeerd", "Negeer")}
+        ${renderActionButtons(action)}
       </div>
     </article>
+  `;
+}
+
+function renderActionButtons(action) {
+  if (isClosedAction(action)) {
+    return renderActionStatusButton(action, "open", "Heropen");
+  }
+
+  return `
+    ${renderActionStatusButton(action, "bezig", "Zet bezig")}
+    ${renderActionStatusButton(action, "wacht_op_ander", "Wacht op ander")}
+    ${renderActionStatusButton(action, "opgelost", "Markeer opgelost")}
+    ${renderActionStatusButton(action, "genegeerd", "Negeer")}
   `;
 }
 
