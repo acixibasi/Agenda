@@ -21,6 +21,7 @@ function createEmptyData() {
     instellingen: {
       actieveMaandId: null,
       standaardPlanningStage: "R1_wensen",
+      contractUren: getDefaultContractHours(),
       dienstNamen: getDefaultDutyNames()
     },
     wijzigingsLog: []
@@ -47,6 +48,7 @@ function normalizeData(raw) {
     ...(incoming.instellingen || {})
   };
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
+  normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
   normalized.wijzigingsLog = Array.isArray(incoming.wijzigingsLog) ? incoming.wijzigingsLog : [];
   normalized.dataVersion = Number(incoming.dataVersion) || DATA_VERSION;
@@ -57,6 +59,23 @@ function normalizeData(raw) {
 
 function getDefaultDutyNames() {
   return DEFAULT_DUTY_NAMES.map((dutyName) => ({ ...dutyName }));
+}
+
+function getDefaultContractHours() {
+  return Object.fromEntries(Object.entries(CONTRACT_HOURS).map(([personId, contract]) => {
+    return [personId, { ...contract }];
+  }));
+}
+
+function normalizeContractHours(value) {
+  const incoming = value && typeof value === "object" ? value : {};
+  return Object.fromEntries(Object.entries(CONTRACT_HOURS).map(([personId, defaults]) => {
+    const contract = incoming[personId] && typeof incoming[personId] === "object" ? incoming[personId] : {};
+    return [personId, {
+      weeklyHours: toPositiveNumber(contract.weeklyHours, defaults.weeklyHours),
+      monthlyToleranceHours: toPositiveNumber(contract.monthlyToleranceHours, defaults.monthlyToleranceHours)
+    }];
+  }));
 }
 
 function getPlanningStageLabels() {
@@ -903,6 +922,7 @@ function renderSettingsPanel() {
   const panel = document.getElementById("settings-panel");
   if (!panel) return;
   const dutyNames = getDutyNames();
+  const contractHours = getContractHours();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -910,6 +930,7 @@ function renderSettingsPanel() {
             <strong>${escapeHtml(dutyName.naam)}</strong>
             <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
           </div>
+          <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen dienstnamen ingesteld.</div>";
@@ -917,15 +938,24 @@ function renderSettingsPanel() {
   panel.innerHTML = `
     <section class="panel">
       <p class="eyebrow">Contracturen</p>
-      <div class="settings-grid">
-        ${Object.entries(CONTRACT_HOURS).map(([personId, contract]) => `
-          <div class="settings-tile">
+      <form id="contract-hours-form" class="settings-form">
+        ${Object.entries(contractHours).map(([personId, contract]) => `
+          <div class="settings-tile settings-edit-tile">
             <strong>${escapeHtml(getPersonLabel(personId))}</strong>
-            <span>${escapeHtml(formatHours(contract.weeklyHours))} uur/week</span>
-            <span>Maandmarge ${escapeHtml(formatHours(contract.monthlyToleranceHours))} uur</span>
+            <label>
+              Uur per week
+              <input name="${escapeHtml(personId)}_weeklyHours" type="number" min="0" step="0.5" value="${escapeHtml(contract.weeklyHours)}" required>
+            </label>
+            <label>
+              Maandmarge
+              <input name="${escapeHtml(personId)}_monthlyToleranceHours" type="number" min="0" step="0.5" value="${escapeHtml(contract.monthlyToleranceHours)}" required>
+            </label>
           </div>
         `).join("")}
-      </div>
+        <div class="form-actions full-width">
+          <button type="submit">Contracturen opslaan</button>
+        </div>
+      </form>
     </section>
 
     <section class="panel">
@@ -936,6 +966,7 @@ function renderSettingsPanel() {
         <div class="storage-row"><span>Eva</span><strong>${dutyNames.filter((item) => item.persoonId === "persoon_vrouw").length}</strong></div>
         <div class="storage-row"><span>Vanaf R2 extra</span><strong>${dutyNames.filter((item) => item.beschikbaarVanaf === "R2_afstemming").length}</strong></div>
       </div>
+      ${renderSettingsDutyNameForm()}
       <div class="duty-name-list settings-duty-list">
         ${dutyRows}
       </div>
@@ -949,6 +980,52 @@ function renderSettingsPanel() {
         <div class="settings-tile"><strong>style.css</strong><span>Vormgeving en responsive gedrag</span></div>
       </div>
     </section>
+  `;
+}
+
+function renderSettingsDutyNameForm() {
+  return `
+    <form id="settings-duty-name-form" class="duty-name-form settings-duty-form">
+      <label>
+        Dienstnaam/code
+        <input name="naam" type="text" placeholder="Bijv. A, LD, Nacht 8" required>
+      </label>
+      <label>
+        Persoon
+        <select name="persoonId" required>
+          ${renderOptions(Object.keys(DUTY_PERSON_OPTIONS), DUTY_PERSON_OPTIONS, "persoon_jij")}
+        </select>
+      </label>
+      <label>
+        Vanaf ronde
+        <select name="beschikbaarVanaf" required>
+          ${renderOptions(PLANNING_STAGES.map((stage) => stage.value), getPlanningStageLabels(), "R1_wensen")}
+        </select>
+      </label>
+      <label>
+        Post
+        <input name="post" type="text" placeholder="Bijv. post noord">
+      </label>
+      <label>
+        Type
+        <select name="dienstType" required>
+          ${renderOptions(SERVICE_TYPES, null, "overig")}
+        </select>
+      </label>
+      <label>
+        Start
+        <input name="start" type="time" required>
+      </label>
+      <label>
+        Einde
+        <input name="einde" type="time" required>
+      </label>
+      <label>
+        Locatie/detail
+        <input name="locatie" type="text" placeholder="Optioneel">
+      </label>
+      <button type="submit">Dienstkeuze toevoegen</button>
+    </form>
   `;
 }
 
@@ -973,7 +1050,7 @@ function renderMonthlyHoursPanel(month) {
 function getMonthlyHoursRows(month) {
   const services = month ? getMonthItems(month.id, "diensten").filter(isWorkingService) : [];
   const servicesByPerson = groupBy(services, "persoonId");
-  return Object.entries(CONTRACT_HOURS).map(([personId, contract]) => {
+  return Object.entries(getContractHours()).map(([personId, contract]) => {
     const personServices = servicesByPerson[personId] || [];
     const actualHours = personServices.reduce((total, service) => total + getServiceDurationHours(service), 0);
     const targetHours = getMonthlyContractTargetHours(month, contract.weeklyHours);
@@ -1513,6 +1590,29 @@ function getDutyNames() {
   return state.data.instellingen.dienstNamen;
 }
 
+function getContractHours() {
+  if (!state.data.instellingen.contractUren || typeof state.data.instellingen.contractUren !== "object") {
+    state.data.instellingen.contractUren = getDefaultContractHours();
+  }
+  state.data.instellingen.contractUren = normalizeContractHours(state.data.instellingen.contractUren);
+  return state.data.instellingen.contractUren;
+}
+
+function updateContractHours(input) {
+  const nextContracts = {};
+  Object.keys(CONTRACT_HOURS).forEach((personId) => {
+    nextContracts[personId] = {
+      weeklyHours: toPositiveNumber(input[`${personId}_weeklyHours`], CONTRACT_HOURS[personId].weeklyHours),
+      monthlyToleranceHours: toPositiveNumber(input[`${personId}_monthlyToleranceHours`], CONTRACT_HOURS[personId].monthlyToleranceHours)
+    };
+  });
+
+  state.data.instellingen.contractUren = normalizeContractHours(nextContracts);
+  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+  saveData("contracturen_bijgewerkt");
+  renderApp();
+}
+
 function addDutyName(input) {
   const dutyName = {
     id: generateId("dienstnaam"),
@@ -1534,12 +1634,14 @@ function addDutyName(input) {
   ];
   saveData("dienstnaam_toegevoegd");
   renderQuickEntry();
+  renderSettingsPanel();
 }
 
 function deleteDutyName(id) {
   state.data.instellingen.dienstNamen = getDutyNames().filter((dutyName) => dutyName.id !== id);
   saveData("dienstnaam_verwijderd");
   renderQuickEntry();
+  renderSettingsPanel();
 }
 
 function applyDutyName(id) {
@@ -2071,7 +2173,7 @@ function checkMonthlyContractHours(context) {
   const results = [];
   const servicesByPerson = groupBy(context.services.filter(isWorkingService), "persoonId");
 
-  Object.entries(CONTRACT_HOURS).forEach(([personId, contract]) => {
+  Object.entries(getContractHours()).forEach(([personId, contract]) => {
     const services = servicesByPerson[personId] || [];
     const actualHours = services.reduce((total, service) => total + getServiceDurationHours(service), 0);
     const targetHours = getMonthlyContractTargetHours(context.month, contract.weeklyHours);
@@ -2392,6 +2494,19 @@ function bindEvents() {
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target.id === "contract-hours-form") {
+      event.preventDefault();
+      updateContractHours(formToObject(event.target));
+      return;
+    }
+
+    if (event.target.id === "settings-duty-name-form") {
+      event.preventDefault();
+      addDutyName(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
     if (event.target.id === "duty-name-form") {
       event.preventDefault();
       addDutyName(formToObject(event.target));
@@ -2528,6 +2643,12 @@ function formatHours(value) {
 function formatSignedHours(value) {
   const sign = value > 0 ? "+" : "";
   return `${sign}${formatHours(value)}`;
+}
+
+function toPositiveNumber(value, fallback) {
+  const number = Number(String(value ?? "").replace(",", "."));
+  if (!Number.isFinite(number) || number < 0) return fallback;
+  return number;
 }
 
 function getMonthlyContractTargetHours(month, weeklyHours) {
