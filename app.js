@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.13-lokaal";
+const APP_VERSION = "0.1.14-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -43,6 +43,13 @@ const SERVICE_TYPES = [
   "opleiding",
   "instructie",
   "overig"
+];
+
+const DEFAULT_DUTY_NAMES = [
+  { id: "dienstnaam_vroeg", naam: "Vroeg", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "" },
+  { id: "dienstnaam_dag", naam: "Dag", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "" },
+  { id: "dienstnaam_laat", naam: "Laat", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "" },
+  { id: "dienstnaam_nacht", naam: "Nacht", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "" }
 ];
 
 const SERVICE_STATUSES = [
@@ -127,7 +134,8 @@ function createEmptyData() {
     bronHistorie: [],
     instellingen: {
       actieveMaandId: null,
-      standaardPlanningStage: "R1_wensen"
+      standaardPlanningStage: "R1_wensen",
+      dienstNamen: getDefaultDutyNames()
     },
     wijzigingsLog: []
   };
@@ -152,12 +160,31 @@ function normalizeData(raw) {
     ...base.instellingen,
     ...(incoming.instellingen || {})
   };
+  normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
   normalized.wijzigingsLog = Array.isArray(incoming.wijzigingsLog) ? incoming.wijzigingsLog : [];
   normalized.dataVersion = Number(incoming.dataVersion) || DATA_VERSION;
   normalized.appVersion = incoming.appVersion || APP_VERSION;
 
   return normalized;
+}
+
+function getDefaultDutyNames() {
+  return DEFAULT_DUTY_NAMES.map((dutyName) => ({ ...dutyName }));
+}
+
+function normalizeDutyNames(value) {
+  const source = Array.isArray(value) ? value : getDefaultDutyNames();
+  return source
+    .map((dutyName) => ({
+      id: dutyName.id || generateId("dienstnaam"),
+      naam: String(dutyName.naam || "").trim(),
+      dienstType: SERVICE_TYPES.includes(dutyName.dienstType) ? dutyName.dienstType : "overig",
+      start: dutyName.start || "",
+      einde: dutyName.einde || "",
+      locatie: String(dutyName.locatie || "").trim()
+    }))
+    .filter((dutyName) => dutyName.naam);
 }
 
 function loadData() {
@@ -974,6 +1001,61 @@ function renderActionStatusButton(action, status, label) {
   return `<button type="button" class="subtle-button${dangerClass}" data-action-status="${status}" data-action-id="${escapeHtml(action.id)}">${label}</button>`;
 }
 
+function renderDutyNameManager(dutyNames) {
+  const presetButtons = dutyNames.length
+    ? dutyNames.map((dutyName) => `
+        <button type="button" class="duty-preset-button" data-apply-duty-name="${escapeHtml(dutyName.id)}">
+          <strong>${escapeHtml(dutyName.naam)}</strong>
+          <span>${escapeHtml(formatCodeLabel(dutyName.dienstType))} ${escapeHtml(formatTimeRange(dutyName.start, dutyName.einde))}</span>
+        </button>
+      `).join("")
+    : "<p class=\"muted-text\">Nog geen dienstnamen opgeslagen.</p>";
+
+  const presetRows = dutyNames.map((dutyName) => `
+    <div class="duty-name-row">
+      <div>
+        <strong>${escapeHtml(dutyName.naam)}</strong>
+        <span>${escapeHtml(formatCodeLabel(dutyName.dienstType))} - ${escapeHtml(formatTimeRange(dutyName.start, dutyName.einde))}${dutyName.locatie ? ` - ${escapeHtml(dutyName.locatie)}` : ""}</span>
+      </div>
+      <button type="button" class="tiny-button" data-delete-duty-name="${escapeHtml(dutyName.id)}">Verwijder</button>
+    </div>
+  `).join("");
+
+  return `
+    <div class="duty-name-manager">
+      <div class="duty-preset-grid">
+        ${presetButtons}
+      </div>
+      <form id="duty-name-form" class="duty-name-form">
+        <label>
+          Dienstnaam/code
+          <input name="naam" type="text" placeholder="Bijv. A, LD, Nacht 8" required>
+        </label>
+        <label>
+          Type
+          <select name="dienstType" required>
+            ${renderOptions(SERVICE_TYPES, null, "overig")}
+          </select>
+        </label>
+        <label>
+          Start
+          <input name="start" type="time" required>
+        </label>
+        <label>
+          Einde
+          <input name="einde" type="time" required>
+        </label>
+        <label>
+          Locatie
+          <input name="locatie" type="text" placeholder="Optioneel">
+        </label>
+        <button type="submit">Voeg dienstnaam toe</button>
+      </form>
+      ${presetRows ? `<div class="duty-name-list">${presetRows}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderQuickEntry() {
   const content = document.getElementById("quick-entry-content");
   const activeMonthId = state.data.instellingen.actieveMaandId;
@@ -994,6 +1076,7 @@ function renderQuickEntry() {
   const editingService = getEditingItem("service") || {};
   const editingFamilyBlock = getEditingItem("family") || {};
   const editingWish = getEditingItem("wish") || {};
+  const dutyNames = getDutyNames();
   const quickDate = state.quickEntry?.date || "";
   const quickLabel = quickDate ? formatLongDate(quickDate) : "";
   const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
@@ -1014,6 +1097,7 @@ function renderQuickEntry() {
 
       <section class="panel ${state.quickEntry?.type === "service" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "service" ? "Dienst bewerken" : "Dienst toevoegen"}</h3>
+        ${renderDutyNameManager(dutyNames)}
         <form id="service-form" class="form-grid">
           <label>
             Persoon
@@ -1373,6 +1457,53 @@ function updateService(id, input) {
   finishItemMutation(previousMonthId, monthId, "dienst_bijgewerkt", input.datum);
 }
 
+function getDutyNames() {
+  if (!Array.isArray(state.data.instellingen.dienstNamen)) {
+    state.data.instellingen.dienstNamen = getDefaultDutyNames();
+  }
+  return state.data.instellingen.dienstNamen;
+}
+
+function addDutyName(input) {
+  const dutyName = {
+    id: generateId("dienstnaam"),
+    naam: String(input.naam || "").trim(),
+    dienstType: SERVICE_TYPES.includes(input.dienstType) ? input.dienstType : "overig",
+    start: input.start || "",
+    einde: input.einde || "",
+    locatie: String(input.locatie || "").trim()
+  };
+
+  if (!dutyName.naam || !dutyName.start || !dutyName.einde) return;
+
+  state.data.instellingen.dienstNamen = [
+    ...getDutyNames().filter((item) => item.naam.toLowerCase() !== dutyName.naam.toLowerCase()),
+    dutyName
+  ];
+  saveData("dienstnaam_toegevoegd");
+  renderQuickEntry();
+}
+
+function deleteDutyName(id) {
+  state.data.instellingen.dienstNamen = getDutyNames().filter((dutyName) => dutyName.id !== id);
+  saveData("dienstnaam_verwijderd");
+  renderQuickEntry();
+}
+
+function applyDutyName(id) {
+  const dutyName = getDutyNames().find((item) => item.id === id);
+  const form = document.getElementById("service-form");
+  if (!dutyName || !form) return;
+
+  form.elements.dienstCode.value = dutyName.naam;
+  form.elements.dienstType.value = dutyName.dienstType;
+  form.elements.start.value = dutyName.start;
+  form.elements.einde.value = dutyName.einde;
+  if (dutyName.locatie) {
+    form.elements.locatie.value = dutyName.locatie;
+  }
+}
+
 function addFamilyBlock(input) {
   const monthId = dateToMonthId(input.datum);
   if (state.editing?.type === "family") {
@@ -1688,7 +1819,7 @@ function checkInvalidTimes(context) {
   const results = [];
 
   context.services.forEach((service) => {
-    if (isValidTimeRange(service.start, service.einde)) return;
+    if (isValidServiceTimeRange(service)) return;
     results.push(createAnalysisResult({
       monthId: context.monthId,
       datum: service.datum,
@@ -2095,6 +2226,18 @@ function bindEvents() {
       return;
     }
 
+    const applyDutyNameButton = event.target.closest("[data-apply-duty-name]");
+    if (applyDutyNameButton) {
+      applyDutyName(applyDutyNameButton.dataset.applyDutyName);
+      return;
+    }
+
+    const deleteDutyNameButton = event.target.closest("[data-delete-duty-name]");
+    if (deleteDutyNameButton) {
+      deleteDutyName(deleteDutyNameButton.dataset.deleteDutyName);
+      return;
+    }
+
     const viewButton = event.target.closest("[data-view-target]");
     if (viewButton) {
       if (viewButton.dataset.viewTarget !== "quick-entry") {
@@ -2153,6 +2296,13 @@ function bindEvents() {
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target.id === "duty-name-form") {
+      event.preventDefault();
+      addDutyName(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
     if (event.target.id === "service-form") {
       event.preventDefault();
       addService(formToObject(event.target));
@@ -2293,6 +2443,13 @@ function isValidTimeRange(start, end) {
   const endMinutes = timeToMinutes(end);
   if (startMinutes === null || endMinutes === null) return false;
   return startMinutes < endMinutes;
+}
+
+function isValidServiceTimeRange(service) {
+  const startMinutes = timeToMinutes(service.start);
+  const endMinutes = timeToMinutes(service.einde);
+  if (startMinutes === null || endMinutes === null) return false;
+  return startMinutes < endMinutes || service.dienstType === "nacht";
 }
 
 function timesOverlap(aStart, aEnd, bStart, bEnd) {

@@ -369,6 +369,70 @@ textarea {
   border-color: var(--brand);
 }
 
+.duty-name-manager {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+}
+
+.duty-preset-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.duty-preset-button {
+  align-items: flex-start;
+  background: #fff;
+  border-color: var(--line);
+  color: var(--text);
+  display: grid;
+  gap: 2px;
+  justify-items: start;
+  min-height: 58px;
+  padding: 8px 10px;
+}
+
+.duty-preset-button:hover {
+  background: #eef4ff;
+}
+
+.duty-preset-button span,
+.duty-name-row span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+.duty-name-form {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(130px, 1.3fr) minmax(120px, 1fr) 100px 100px minmax(120px, 1fr) auto;
+  align-items: end;
+}
+
+.duty-name-list {
+  display: grid;
+  gap: 6px;
+}
+
+.duty-name-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+}
+
+.duty-name-row > div {
+  display: grid;
+  gap: 2px;
+}
+
 .muted-text {
   color: var(--muted);
   margin: 0;
@@ -803,6 +867,15 @@ textarea {
 
   .form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .duty-name-form {
+    grid-template-columns: 1fr;
+  }
+
+  .duty-name-row {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .control-header {
