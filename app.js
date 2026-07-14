@@ -1311,7 +1311,7 @@ function renderSettingsPanel() {
       <form id="school-ical-url-form" class="duty-name-form settings-duty-form">
         <label class="full-width">
           iCal-link school
-          <input name="schoolIcalUrl" type="url" value="${escapeHtml(state.data.instellingen.schoolIcalUrl || "")}" placeholder="https://.../schoolagenda.ics">
+          <input name="schoolIcalUrl" type="text" value="${escapeHtml(state.data.instellingen.schoolIcalUrl || "")}" placeholder="webcal://... of https://.../schoolagenda.ics">
         </label>
         <div class="form-actions full-width">
           <button type="submit">iCal-link opslaan</button>
@@ -2277,16 +2277,25 @@ function importSchoolIcalUrl() {
     return;
   }
 
+  const fetchUrl = normalizeCalendarUrl(url);
   const fetchCalendar = window.fetch || fetch;
-  return fetchCalendar(url)
+  return fetchCalendar(fetchUrl)
     .then((response) => {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       return response.text();
     })
     .then((text) => importSchoolIcalText(text, url))
     .catch(() => {
-      window.alert("De iCal-link kon niet worden ingelezen. Vaak blokkeert de schoolserver directe browser-toegang. Download dan het .ics-bestand en gebruik iCal school importeren.");
+      window.alert("De iCal-link kon niet worden ingelezen. Webcal-links worden automatisch als https geprobeerd, maar vaak blokkeert de schoolserver directe browser-toegang. Download dan het .ics-bestand en gebruik iCal school importeren.");
     });
+}
+
+function normalizeCalendarUrl(url) {
+  const value = String(url || "").trim();
+  if (value.toLowerCase().startsWith("webcal://")) {
+    return `https://${value.slice(9)}`;
+  }
+  return value;
 }
 
 function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
