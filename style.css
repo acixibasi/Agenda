@@ -459,6 +459,39 @@ textarea {
   color: var(--good-text);
 }
 
+.cockpit-filter-panel {
+  box-shadow: none;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-button {
+  min-height: 34px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--text);
+  padding: 0 10px;
+}
+
+.filter-button span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.filter-button.active {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.filter-button.active span {
+  color: #fff;
+}
+
 .control-columns {
   display: grid;
   gap: 12px;
@@ -516,9 +549,20 @@ textarea {
   outline-offset: 2px;
 }
 
+.control-finding-closed {
+  opacity: 0.75;
+}
+
 .day-link-label {
   color: var(--brand);
   font-weight: 700;
+}
+
+.notification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
 }
 
 .action-status-bezig {

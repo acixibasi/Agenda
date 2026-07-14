@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.12-lokaal";
+const APP_VERSION = "0.1.13-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -113,7 +113,8 @@ let state = {
   editing: null,
   quickEntry: null,
   selectedDate: null,
-  pendingFocusDate: null
+  pendingFocusDate: null,
+  cockpitFilter: "all"
 };
 
 function createEmptyData() {
@@ -408,7 +409,14 @@ function sortActions(a, b) {
 function getVisibleAnalyses(monthId) {
   return state.data.analyseResultaten.filter((result) => {
     const inMonth = !monthId || result.maandPlanningId === monthId;
-    return inMonth && result.actieStatus !== "vervallen";
+    return inMonth && !["vervallen", "gezien", "bewust_akkoord"].includes(result.actieStatus);
+  });
+}
+
+function getClosedNotifications(monthId) {
+  return state.data.analyseResultaten.filter((result) => {
+    const inMonth = !monthId || result.maandPlanningId === monthId;
+    return inMonth && result.ernst === "notificatie" && ["gezien", "bewust_akkoord"].includes(result.actieStatus);
   });
 }
 
@@ -501,6 +509,8 @@ function renderMonthCockpit() {
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
   const controlSummary = buildControlSummary(month, days);
+  const dayFilters = buildDayFilters(days);
+  const filteredDays = filterMonthDays(days, state.cockpitFilter);
 
   content.innerHTML = `
     <div class="cockpit-header">
@@ -548,8 +558,10 @@ function renderMonthCockpit() {
 
       ${renderDayDetail(selectedDay)}
 
+      ${renderCockpitFilters(dayFilters)}
+
       <section class="stack">
-        ${days.map(renderDayRow).join("")}
+        ${filteredDays.length ? filteredDays.map(renderDayRow).join("") : "<div class=\"empty-state\">Geen dagen voor dit filter.</div>"}
       </section>
     </div>
   `;
@@ -562,6 +574,7 @@ function buildControlSummary(month, days) {
   const checks = analyses.filter((item) => ["aandacht", "waarschuwing", "keuze_nodig"].includes(item.ernst));
   const incomplete = analyses.filter((item) => item.ernst === "onvolledig");
   const notifications = analyses.filter((item) => item.ernst === "notificatie");
+  const closedNotifications = getClosedNotifications(month.id);
   const okDays = days.filter((day) => {
     const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
     const hasProblem = day.analyses.length || day.actions.length;
@@ -576,6 +589,7 @@ function buildControlSummary(month, days) {
     checks,
     incomplete,
     notifications,
+    closedNotifications,
     openActions,
     okDays,
     checkedAt: month.laatstBijgewerkt
@@ -618,6 +632,7 @@ function renderControlCenter(summary) {
         ${renderControlSection("Conflicten", summary.conflicts, "Geen harde conflicten.", "conflict")}
         ${renderControlSection("Te controleren", summary.checks, "Geen controlepunten.", "attention")}
         ${renderControlSection("Notificaties", summary.notifications, "Geen zachte notificaties.", "notification")}
+        ${renderControlSection("Afgehandelde notificaties", summary.closedNotifications, "Nog geen notificaties afgehandeld.", "notification-closed")}
         ${renderControlSection("Onvolledig", summary.incomplete, "Geen ontbrekende basisgegevens.", "incomplete")}
         ${renderOkDays(summary.okDays)}
       </div>
@@ -643,13 +658,80 @@ function renderControlSection(title, analyses, emptyText, type) {
   `;
 }
 
-function renderControlFinding(result) {
+function buildDayFilters(days) {
+  return [
+    { value: "all", label: "Alles", count: days.length },
+    { value: "conflict", label: "Conflicten", count: filterMonthDays(days, "conflict").length },
+    { value: "attention", label: "Te controleren", count: filterMonthDays(days, "attention").length },
+    { value: "notification", label: "Notificaties", count: filterMonthDays(days, "notification").length },
+    { value: "incomplete", label: "Onvolledig", count: filterMonthDays(days, "incomplete").length },
+    { value: "actions", label: "Open acties", count: filterMonthDays(days, "actions").length },
+    { value: "ok", label: "Geen probleem", count: filterMonthDays(days, "ok").length }
+  ];
+}
+
+function renderCockpitFilters(filters) {
   return `
-    <article class="control-finding control-finding-link" data-open-day="${escapeHtml(result.datum)}" role="button" tabindex="0">
+    <section class="panel cockpit-filter-panel">
+      <p class="eyebrow">Dagfilter</p>
+      <div class="filter-bar" role="list" aria-label="Filter dagen">
+        ${filters.map((filter) => `
+          <button type="button" class="filter-button ${state.cockpitFilter === filter.value ? "active" : ""}" data-cockpit-filter="${escapeHtml(filter.value)}">
+            ${escapeHtml(filter.label)} <span>${filter.count}</span>
+          </button>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function filterMonthDays(days, filter) {
+  if (filter === "all") return days;
+  return days.filter((day) => dayMatchesFilter(day, filter));
+}
+
+function dayMatchesFilter(day, filter) {
+  const activeAnalyses = day.analyses.filter((result) => !["gezien", "bewust_akkoord", "vervallen"].includes(result.actieStatus));
+  if (filter === "conflict") return activeAnalyses.some((result) => result.ernst === "conflict");
+  if (filter === "attention") return activeAnalyses.some((result) => ["aandacht", "waarschuwing", "keuze_nodig"].includes(result.ernst));
+  if (filter === "notification") return activeAnalyses.some((result) => result.ernst === "notificatie");
+  if (filter === "incomplete") return activeAnalyses.some((result) => result.ernst === "onvolledig");
+  if (filter === "actions") return day.actions.length > 0;
+  if (filter === "ok") {
+    const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length;
+    return hasContent && !activeAnalyses.length && !day.actions.length;
+  }
+  return true;
+}
+
+function renderControlFinding(result) {
+  const isNotification = result.ernst === "notificatie";
+  const isClosedNotification = isNotification && ["gezien", "bewust_akkoord"].includes(result.actieStatus);
+  return `
+    <article class="control-finding control-finding-link ${isClosedNotification ? "control-finding-closed" : ""}" data-open-day="${escapeHtml(result.datum)}" role="button" tabindex="0">
       <span class="day-link-label">Ga naar dag: ${escapeHtml(formatLongDate(result.datum))}</span>
       <strong>${escapeHtml(result.melding || "Controlepunt")}</strong>
-      ${result.advies ? `<span>${result.ernst === "notificatie" ? "Notificatie" : "Hard advies"}: ${escapeHtml(result.advies)}</span>` : ""}
+      ${result.advies ? `<span>${isNotification ? "Notificatie" : "Hard advies"}: ${escapeHtml(result.advies)}</span>` : ""}
+      ${isClosedNotification ? `<span class="control-meta">Status: ${escapeHtml(formatCodeLabel(result.actieStatus))}</span>` : ""}
+      ${isNotification ? renderNotificationButtons(result) : ""}
     </article>
+  `;
+}
+
+function renderNotificationButtons(result) {
+  if (["gezien", "bewust_akkoord"].includes(result.actieStatus)) {
+    return `
+      <div class="notification-actions">
+        <button type="button" class="tiny-button" data-notification-status="open" data-analysis-id="${escapeHtml(result.id)}">Heropen</button>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="notification-actions">
+      <button type="button" class="tiny-button" data-notification-status="gezien" data-analysis-id="${escapeHtml(result.id)}">Gezien</button>
+      <button type="button" class="tiny-button" data-notification-status="bewust_akkoord" data-analysis-id="${escapeHtml(result.id)}">Bewust akkoord</button>
+    </div>
   `;
 }
 
@@ -1418,6 +1500,11 @@ function clearQuickEntry() {
   renderQuickEntry();
 }
 
+function setCockpitFilter(filter) {
+  state.cockpitFilter = filter || "all";
+  renderMonthCockpit();
+}
+
 function openDay(date) {
   const monthId = dateToMonthId(date);
   if (!getMonth(monthId)) return;
@@ -1509,6 +1596,7 @@ function getItemTypeLogName(type) {
 
 function runAnalysis(monthId) {
   const context = buildAnalysisContext(monthId);
+  const preservedNotificationStatuses = getPreservedNotificationStatuses(monthId);
   clearGeneratedAnalysis(monthId);
 
   const results = [
@@ -1519,11 +1607,27 @@ function runAnalysis(monthId) {
     ...checkBothParentsBusy(context),
     ...checkSoftWorktimeNotifications(context),
     ...checkWishConflicts(context)
-  ];
+  ].map((result) => restoreNotificationStatus(result, preservedNotificationStatuses));
 
   state.data.analyseResultaten.push(...results);
   syncActionsWithAnalysis(monthId, results);
   updateMonthStatus(monthId);
+}
+
+function getPreservedNotificationStatuses(monthId) {
+  return state.data.analyseResultaten.reduce((statuses, result) => {
+    if (result.maandPlanningId === monthId && result.ernst === "notificatie" && ["gezien", "bewust_akkoord"].includes(result.actieStatus)) {
+      statuses[result.signature] = result.actieStatus;
+    }
+    return statuses;
+  }, {});
+}
+
+function restoreNotificationStatus(result, statuses) {
+  if (result.ernst === "notificatie" && statuses[result.signature]) {
+    return { ...result, actieStatus: statuses[result.signature] };
+  }
+  return result;
 }
 
 function buildAnalysisContext(monthId) {
@@ -1879,6 +1983,22 @@ function updateActionStatus(actionId, status) {
   renderApp();
 }
 
+function updateNotificationStatus(analysisId, status) {
+  const result = state.data.analyseResultaten.find((item) => item.id === analysisId);
+  if (!result || result.ernst !== "notificatie") return;
+
+  if (status === "bewust_akkoord") {
+    const ok = window.confirm("Deze notificatie bewust akkoord markeren? De melding verdwijnt uit de actieve notificaties, maar blijft in de historie staan.");
+    if (!ok) return;
+  }
+
+  result.actieStatus = status;
+  result.laatstBijgewerkt = new Date().toISOString();
+  updateMonthStatus(result.maandPlanningId);
+  saveData(`notificatie_${status}`);
+  renderApp();
+}
+
 function updateLinkedAnalysisStatus(action, status) {
   const mappedStatus = ["opgelost", "genegeerd"].includes(status) ? status : "open";
   const linkedIds = Array.isArray(action.gekoppeldeAnalyseIds) ? action.gekoppeldeAnalyseIds : [];
@@ -1963,6 +2083,18 @@ function bindEvents() {
       rerunMonthControl(runAnalysisButton.dataset.runAnalysis);
     }
 
+    const filterButton = event.target.closest("[data-cockpit-filter]");
+    if (filterButton) {
+      setCockpitFilter(filterButton.dataset.cockpitFilter);
+      return;
+    }
+
+    const notificationStatusButton = event.target.closest("[data-notification-status]");
+    if (notificationStatusButton) {
+      updateNotificationStatus(notificationStatusButton.dataset.analysisId, notificationStatusButton.dataset.notificationStatus);
+      return;
+    }
+
     const viewButton = event.target.closest("[data-view-target]");
     if (viewButton) {
       if (viewButton.dataset.viewTarget !== "quick-entry") {
@@ -2045,6 +2177,7 @@ function bindEvents() {
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.target.closest("[data-notification-status]")) return;
     const openDayTarget = event.target.closest("[data-open-day]");
     if (!openDayTarget || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
