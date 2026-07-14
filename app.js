@@ -8,7 +8,8 @@ let state = {
   selectedDate: null,
   pendingFocusDate: null,
   cockpitFilter: "all",
-  editingDutyNameId: null
+  editingDutyNameId: null,
+  editingFamilyTemplateId: null
 };
 
 function createEmptyData() {
@@ -23,7 +24,8 @@ function createEmptyData() {
       actieveMaandId: null,
       standaardPlanningStage: "R1_wensen",
       contractUren: getDefaultContractHours(),
-      dienstNamen: getDefaultDutyNames()
+      dienstNamen: getDefaultDutyNames(),
+      gezinsSjablonen: []
     },
     wijzigingsLog: []
   };
@@ -50,6 +52,7 @@ function normalizeData(raw) {
   };
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
+  normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
   normalized.wijzigingsLog = Array.isArray(incoming.wijzigingsLog) ? incoming.wijzigingsLog : [];
   normalized.dataVersion = Number(incoming.dataVersion) || DATA_VERSION;
@@ -108,6 +111,23 @@ function normalizeDutyWeekdays(value) {
   const validDays = new Set(WEEKDAY_OPTIONS.map((day) => day.value));
   const source = Array.isArray(value) && value.length ? value : WEEKDAY_OPTIONS.map((day) => day.value);
   return [...new Set(source.map(String).filter((day) => validDays.has(day)))];
+}
+
+function normalizeFamilyTemplates(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((template) => ({
+      id: template.id || generateId("gezin_sjabloon"),
+      naam: String(template.naam || "").trim(),
+      type: FAMILY_BLOCK_TYPES.includes(template.type) ? template.type : "overig",
+      beschikbareDagen: normalizeDutyWeekdays(template.beschikbareDagen),
+      start: template.start || "",
+      einde: template.einde || "",
+      hardheid: template.hardheid === "zacht" ? "zacht" : "hard",
+      dekkingNodig: template.dekkingNodig !== false && template.dekkingNodig !== "false",
+      opmerking: String(template.opmerking || "").trim()
+    }))
+    .filter((template) => template.naam);
 }
 
 function loadData() {
@@ -930,8 +950,10 @@ function renderSettingsPanel() {
   const panel = document.getElementById("settings-panel");
   if (!panel) return;
   const dutyNames = getDutyNames();
+  const familyTemplates = getFamilyTemplates();
   const contractHours = getContractHours();
   const editingDutyName = getEditingDutyName();
+  const editingFamilyTemplate = getEditingFamilyTemplate();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -946,6 +968,20 @@ function renderSettingsPanel() {
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen dienstnamen ingesteld.</div>";
+  const familyTemplateRows = familyTemplates.length
+    ? familyTemplates.map((template) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(template.naam)}</strong>
+            <span>${escapeHtml(getFamilyTemplateMeta(template))}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-edit-family-template="${escapeHtml(template.id)}">Wijzig</button>
+            <button type="button" class="tiny-button" data-delete-family-template="${escapeHtml(template.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen vaste gezinsmomenten ingesteld.</div>";
 
   panel.innerHTML = `
     <section class="panel">
@@ -981,6 +1017,18 @@ function renderSettingsPanel() {
       ${renderSettingsDutyNameForm(editingDutyName)}
       <div class="duty-name-list settings-duty-list">
         ${dutyRows}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Vaste gezinsmomenten</p>
+      <div class="storage-list">
+        <div class="storage-row"><span>Totaal sjablonen</span><strong>${familyTemplates.length}</strong></div>
+        <div class="storage-row"><span>Dekking nodig</span><strong>${familyTemplates.filter((item) => item.dekkingNodig).length}</strong></div>
+      </div>
+      ${renderSettingsFamilyTemplateForm(editingFamilyTemplate)}
+      <div class="duty-name-list settings-duty-list">
+        ${familyTemplateRows}
       </div>
     </section>
 
@@ -1052,6 +1100,61 @@ function renderSettingsDutyNameForm(editingDutyName = null) {
   `;
 }
 
+function renderSettingsFamilyTemplateForm(editingTemplate = null) {
+  const template = editingTemplate || {};
+  const submitLabel = editingTemplate ? "Gezinsmoment opslaan" : "Gezinsmoment toevoegen";
+  return `
+    <form id="family-template-form" class="duty-name-form settings-duty-form">
+      <label>
+        Naam
+        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. sport, opvang, school halen" required>
+      </label>
+      <label>
+        Type
+        <select name="type" required>
+          ${renderOptions(FAMILY_BLOCK_TYPES, null, template.type || "overig")}
+        </select>
+      </label>
+      <label>
+        Start
+        <input name="start" type="time" value="${escapeHtml(template.start || "")}" required>
+      </label>
+      <label>
+        Einde
+        <input name="einde" type="time" value="${escapeHtml(template.einde || "")}" required>
+      </label>
+      <label>
+        Hardheid
+        <select name="hardheid" required>
+          <option value="hard"${selectedAttr(template.hardheid || "hard", "hard")}>Hard</option>
+          <option value="zacht"${selectedAttr(template.hardheid || "hard", "zacht")}>Zacht</option>
+        </select>
+      </label>
+      <label>
+        Dekking nodig
+        <select name="dekkingNodig" required>
+          <option value="true"${selectedAttr(String(template.dekkingNodig ?? true), "true")}>Ja</option>
+          <option value="false"${selectedAttr(String(template.dekkingNodig ?? true), "false")}>Nee</option>
+        </select>
+      </label>
+      <label class="full-width">
+        Opmerking
+        <textarea name="opmerking" placeholder="Bijv. wie haalt, vaste afspraak">${escapeHtml(template.opmerking || "")}</textarea>
+      </label>
+      <fieldset class="weekday-fieldset">
+        <legend>Dagen beschikbaar</legend>
+        <div class="weekday-options">
+          ${renderWeekdayCheckboxes(template.beschikbareDagen)}
+        </div>
+      </fieldset>
+      <div class="form-actions">
+        <button type="submit">${submitLabel}</button>
+        ${editingTemplate ? "<button type=\"button\" class=\"subtle-button\" data-cancel-family-template-edit>Annuleer</button>" : ""}
+      </div>
+    </form>
+  `;
+}
+
 function renderWeekdayCheckboxes(selectedDays = null) {
   const selected = new Set(normalizeDutyWeekdays(selectedDays));
   return WEEKDAY_OPTIONS.map((day) => `
@@ -1060,6 +1163,16 @@ function renderWeekdayCheckboxes(selectedDays = null) {
       ${escapeHtml(day.label)}
     </label>
   `).join("");
+}
+
+function getFamilyTemplateMeta(template) {
+  return [
+    formatCodeLabel(template.type),
+    getDutyWeekdayLabel(template.beschikbareDagen),
+    formatTimeRange(template.start, template.einde),
+    template.hardheid === "zacht" ? "zacht" : "hard",
+    template.dekkingNodig ? "dekking nodig" : "geen dekking"
+  ].join(" - ");
 }
 
 function renderMonthlyHoursPanel(month) {
@@ -1122,6 +1235,29 @@ function renderDutyNameManager(dutyNames, activeStage) {
   `;
 }
 
+function renderFamilyTemplateManager(templates) {
+  const buttons = templates.length
+    ? templates.map((template) => `
+        <button type="button" class="duty-preset-button" data-apply-family-template="${escapeHtml(template.id)}">
+          <strong>${escapeHtml(template.naam)}</strong>
+          <span>${escapeHtml(getFamilyTemplateMeta(template))}</span>
+        </button>
+      `).join("")
+    : "<p class=\"muted-text\">Geen vaste gezinsmomenten ingesteld.</p>";
+
+  return `
+    <div class="duty-name-manager">
+      <div class="duty-preset-grid">
+        ${buttons}
+      </div>
+      <p class="muted-text duty-empty-message" data-family-template-empty-message>Geen vast gezinsmoment voor deze datum.</p>
+      <div class="toolbar">
+        <button type="button" class="subtle-button" data-view-target="settings">Beheer vaste gezinsmomenten</button>
+      </div>
+    </div>
+  `;
+}
+
 function getDutyNameMeta(dutyName) {
   const person = DUTY_PERSON_OPTIONS[dutyName.persoonId] || getPersonLabel(dutyName.persoonId);
   const stage = getPlanningStageLabels()[dutyName.beschikbaarVanaf] || formatCodeLabel(dutyName.beschikbaarVanaf);
@@ -1165,6 +1301,30 @@ function updateDutyNameVisibility() {
   if (emptyMessage) emptyMessage.hidden = visibleCount > 0 || !buttons.length;
 }
 
+function updateFamilyTemplateVisibility() {
+  const form = document.getElementById("family-block-form");
+  const selectedDate = form?.elements.datum?.value || "";
+  const buttons = Array.from(document.querySelectorAll("[data-apply-family-template]"));
+  let visibleCount = 0;
+
+  buttons.forEach((button) => {
+    const template = getFamilyTemplates().find((item) => item.id === button.dataset.applyFamilyTemplate);
+    const visible = template && isFamilyTemplateAvailableOnDate(template, selectedDate);
+    button.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+
+  const emptyMessage = document.querySelector("[data-family-template-empty-message]");
+  if (emptyMessage) emptyMessage.hidden = visibleCount > 0 || !buttons.length;
+}
+
+function isFamilyTemplateAvailableOnDate(template, dateValue) {
+  if (!dateValue) return true;
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return true;
+  return normalizeDutyWeekdays(template.beschikbareDagen).includes(String(date.getDay()));
+}
+
 function isDutyNameAvailableFor(dutyName, selectedPersonId, activeStage, selectedDate = "") {
   const personMatches = dutyName.persoonId === "beiden" || dutyName.persoonId === selectedPersonId;
   if (!personMatches) return false;
@@ -1206,6 +1366,7 @@ function renderQuickEntry() {
   const editingFamilyBlock = getEditingItem("family") || {};
   const editingWish = getEditingItem("wish") || {};
   const dutyNames = getDutyNames();
+  const familyTemplates = getFamilyTemplates();
   const activeStage = month.planningStage || state.data.instellingen.standaardPlanningStage;
   const quickDate = state.quickEntry?.date || "";
   const quickLabel = quickDate ? formatLongDate(quickDate) : "";
@@ -1280,6 +1441,7 @@ function renderQuickEntry() {
 
       <section class="panel ${state.quickEntry?.type === "family" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "family" ? "Gezinsverplichting bewerken" : "Gezinsverplichting toevoegen"}</h3>
+        ${renderFamilyTemplateManager(familyTemplates)}
         <form id="family-block-form" class="form-grid">
           <label>
             Type
@@ -1364,6 +1526,7 @@ function renderQuickEntry() {
     </div>
   `;
   updateDutyNameVisibility();
+  updateFamilyTemplateVisibility();
 }
 
 function renderStoragePanel() {
@@ -1638,6 +1801,14 @@ function getContractHours() {
   return state.data.instellingen.contractUren;
 }
 
+function getFamilyTemplates() {
+  if (!Array.isArray(state.data.instellingen.gezinsSjablonen)) {
+    state.data.instellingen.gezinsSjablonen = [];
+  }
+  state.data.instellingen.gezinsSjablonen = normalizeFamilyTemplates(state.data.instellingen.gezinsSjablonen);
+  return state.data.instellingen.gezinsSjablonen;
+}
+
 function updateContractHours(input) {
   const nextContracts = {};
   Object.keys(CONTRACT_HOURS).forEach((personId) => {
@@ -1651,6 +1822,68 @@ function updateContractHours(input) {
   state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
   saveData("contracturen_bijgewerkt");
   renderApp();
+}
+
+function addFamilyTemplate(input) {
+  const template = {
+    id: state.editingFamilyTemplateId || generateId("gezin_sjabloon"),
+    naam: String(input.naam || "").trim(),
+    type: FAMILY_BLOCK_TYPES.includes(input.type) ? input.type : "overig",
+    beschikbareDagen: normalizeDutyWeekdays(getFormArrayValue(input.beschikbareDagen)),
+    start: input.start || "",
+    einde: input.einde || "",
+    hardheid: input.hardheid === "zacht" ? "zacht" : "hard",
+    dekkingNodig: input.dekkingNodig !== "false",
+    opmerking: String(input.opmerking || "").trim()
+  };
+
+  if (!template.naam || !template.start || !template.einde) return;
+
+  const reason = state.editingFamilyTemplateId ? "gezinssjabloon_bijgewerkt" : "gezinssjabloon_toegevoegd";
+  state.data.instellingen.gezinsSjablonen = [
+    ...getFamilyTemplates().filter((item) => {
+      if (state.editingFamilyTemplateId) return item.id !== state.editingFamilyTemplateId;
+      return getFamilyTemplateKey(item) !== getFamilyTemplateKey(template);
+    }),
+    template
+  ];
+  state.editingFamilyTemplateId = null;
+  saveData(reason);
+  renderQuickEntry();
+  renderSettingsPanel();
+}
+
+function deleteFamilyTemplate(id) {
+  state.data.instellingen.gezinsSjablonen = getFamilyTemplates().filter((template) => template.id !== id);
+  if (state.editingFamilyTemplateId === id) state.editingFamilyTemplateId = null;
+  saveData("gezinssjabloon_verwijderd");
+  renderQuickEntry();
+  renderSettingsPanel();
+}
+
+function startEditFamilyTemplate(id) {
+  if (!getFamilyTemplates().some((template) => template.id === id)) return;
+  state.editingFamilyTemplateId = id;
+  renderSettingsPanel();
+}
+
+function cancelEditFamilyTemplate() {
+  state.editingFamilyTemplateId = null;
+  renderSettingsPanel();
+}
+
+function getEditingFamilyTemplate() {
+  if (!state.editingFamilyTemplateId) return null;
+  return getFamilyTemplates().find((template) => template.id === state.editingFamilyTemplateId) || null;
+}
+
+function getFamilyTemplateKey(template) {
+  return [
+    String(template.naam || "").trim().toLowerCase(),
+    template.type || "",
+    String(template.start || ""),
+    String(template.einde || "")
+  ].join("|");
 }
 
 function addDutyName(input) {
@@ -1729,6 +1962,24 @@ function applyDutyName(id) {
     form.elements.locatie.value = dutyName.post || dutyName.locatie;
   }
   updateDutyNameVisibility();
+}
+
+function applyFamilyTemplate(id) {
+  const template = getFamilyTemplates().find((item) => item.id === id);
+  const form = document.getElementById("family-block-form");
+  if (!template || !form) return;
+  if (!isFamilyTemplateAvailableOnDate(template, form.elements.datum.value)) {
+    window.alert(`${template.naam} is niet beschikbaar op ${formatLongDate(form.elements.datum.value)}.`);
+    return;
+  }
+
+  form.elements.type.value = template.type;
+  form.elements.start.value = template.start;
+  form.elements.einde.value = template.einde;
+  form.elements.hardheid.value = template.hardheid;
+  form.elements.dekkingNodig.value = String(template.dekkingNodig);
+  form.elements.opmerking.value = template.opmerking || template.naam;
+  updateFamilyTemplateVisibility();
 }
 
 function getDutyNameKey(dutyName) {
@@ -2505,6 +2756,12 @@ function bindEvents() {
       return;
     }
 
+    const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
+    if (applyFamilyTemplateButton) {
+      applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
+      return;
+    }
+
     const editDutyNameButton = event.target.closest("[data-edit-duty-name]");
     if (editDutyNameButton) {
       startEditDutyName(editDutyNameButton.dataset.editDutyName);
@@ -2517,8 +2774,25 @@ function bindEvents() {
       return;
     }
 
+    const editFamilyTemplateButton = event.target.closest("[data-edit-family-template]");
+    if (editFamilyTemplateButton) {
+      startEditFamilyTemplate(editFamilyTemplateButton.dataset.editFamilyTemplate);
+      return;
+    }
+
+    const deleteFamilyTemplateButton = event.target.closest("[data-delete-family-template]");
+    if (deleteFamilyTemplateButton) {
+      deleteFamilyTemplate(deleteFamilyTemplateButton.dataset.deleteFamilyTemplate);
+      return;
+    }
+
     if (event.target.closest("[data-cancel-duty-edit]")) {
       cancelEditDutyName();
+      return;
+    }
+
+    if (event.target.closest("[data-cancel-family-template-edit]")) {
+      cancelEditFamilyTemplate();
       return;
     }
 
@@ -2593,6 +2867,13 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.id === "family-template-form") {
+      event.preventDefault();
+      addFamilyTemplate(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
     if (event.target.id === "service-form") {
       event.preventDefault();
       addService(formToObject(event.target));
@@ -2612,6 +2893,10 @@ function bindEvents() {
   document.addEventListener("change", (event) => {
     if (event.target.matches("#service-form select[name='persoonId'], #service-form input[name='datum']")) {
       updateDutyNameVisibility();
+    }
+
+    if (event.target.matches("#family-block-form input[name='datum']")) {
+      updateFamilyTemplateVisibility();
     }
 
     if (event.target.matches("[data-backup-file]")) {
