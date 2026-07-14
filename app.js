@@ -54,6 +54,7 @@ function normalizeData(raw) {
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
+  normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
   normalized.kinderen = normalizeChildren(normalized.kinderen);
   normalized.contextPeriodes = normalizeContextPeriods(normalized.contextPeriodes);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
@@ -1307,6 +1308,17 @@ function renderSettingsPanel() {
       </div>
 
       <h3 class="subsection-title">Vakanties en studiedagen</h3>
+      <form id="school-ical-url-form" class="duty-name-form settings-duty-form">
+        <label class="full-width">
+          iCal-link school
+          <input name="schoolIcalUrl" type="url" value="${escapeHtml(state.data.instellingen.schoolIcalUrl || "")}" placeholder="https://.../schoolagenda.ics">
+        </label>
+        <div class="form-actions full-width">
+          <button type="submit">iCal-link opslaan</button>
+          <button type="button" class="subtle-button" data-import-school-ical-url>iCal-link inlezen</button>
+        </div>
+        <p class="muted-text full-width">Als de schoolserver browsertoegang blokkeert, gebruik dan de bestand-import hieronder.</p>
+      </form>
       <form id="school-period-form" class="duty-name-form settings-duty-form">
         <label>
           Type
@@ -2252,6 +2264,31 @@ function importSchoolIcalFile(file) {
     .catch(() => window.alert("iCal-bestand kon niet worden gelezen."));
 }
 
+function saveSchoolIcalUrl(input) {
+  state.data.instellingen.schoolIcalUrl = String(input.schoolIcalUrl || "").trim();
+  saveData("school_ical_link_opgeslagen");
+  renderSettingsPanel();
+}
+
+function importSchoolIcalUrl() {
+  const url = String(state.data.instellingen.schoolIcalUrl || "").trim();
+  if (!url) {
+    window.alert("Vul eerst een iCal-link van school in en sla deze op.");
+    return;
+  }
+
+  const fetchCalendar = window.fetch || fetch;
+  return fetchCalendar(url)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    })
+    .then((text) => importSchoolIcalText(text, url))
+    .catch(() => {
+      window.alert("De iCal-link kon niet worden ingelezen. Vaak blokkeert de schoolserver directe browser-toegang. Download dan het .ics-bestand en gebruik iCal school importeren.");
+    });
+}
+
 function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
   const events = parseIcalEvents(text);
   let added = 0;
@@ -2276,7 +2313,7 @@ function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
     saveData("school_ical_geimporteerd");
     renderSettingsPanel();
   }
-  window.alert(`${added} vakantie/studiedag item(s) geïmporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
+  window.alert(`${added} vakantie/studiedag item(s) geimporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
 }
 
 function parseIcalEvents(text) {
@@ -3432,6 +3469,11 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("[data-import-school-ical-url]")) {
+      importSchoolIcalUrl();
+      return;
+    }
+
     const editDutyNameButton = event.target.closest("[data-edit-duty-name]");
     if (editDutyNameButton) {
       startEditDutyName(editDutyNameButton.dataset.editDutyName);
@@ -3573,6 +3615,12 @@ function bindEvents() {
       event.preventDefault();
       addSchoolTime(formToObject(event.target));
       event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "school-ical-url-form") {
+      event.preventDefault();
+      saveSchoolIcalUrl(formToObject(event.target));
       return;
     }
 
