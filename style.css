@@ -360,6 +360,15 @@ textarea {
   font-size: 0.9rem;
 }
 
+.quick-entry-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+}
+
+.quick-entry-target {
+  border-color: var(--brand);
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }
@@ -435,6 +444,13 @@ textarea {
 .day-date {
   color: var(--muted);
   font-weight: 700;
+}
+
+.day-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 .item-list {

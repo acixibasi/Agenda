@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.6-lokaal";
+const APP_VERSION = "0.1.7-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -110,7 +110,8 @@ const MODULE_1_ARRAYS = [
 let state = {
   data: createEmptyData(),
   currentView: "months",
-  editing: null
+  editing: null,
+  quickEntry: null
 };
 
 function createEmptyData() {
@@ -222,6 +223,7 @@ function createMonth(year, month, planningStage) {
   state.data.maandPlanningen.push(monthPlanning);
   state.data.maandPlanningen.sort((a, b) => a.id.localeCompare(b.id));
   state.data.instellingen.actieveMaandId = monthId;
+  state.quickEntry = null;
   saveData("maand_aangemaakt");
   showView("cockpit");
   return monthPlanning;
@@ -229,6 +231,7 @@ function createMonth(year, month, planningStage) {
 
 function openMonth(monthId) {
   state.editing = null;
+  state.quickEntry = null;
   state.data.instellingen.actieveMaandId = monthId;
   saveData("maand_geopend");
   showView("cockpit");
@@ -276,6 +279,7 @@ function duplicateMonth(monthId) {
   duplicateMonthCollection("gezinsVerplichtingen", monthId, targetId, copyFamilyBlockForMonth);
   duplicateMonthCollection("wensen", monthId, targetId, copyWishForMonth);
   state.data.instellingen.actieveMaandId = targetId;
+  state.quickEntry = null;
   runAnalysis(targetId);
   saveData("maand_gedupliceerd");
   showView("cockpit");
@@ -543,6 +547,11 @@ function renderDayRow(day) {
     <article class="day-row ${hasSignals ? "day-row-signal" : ""}">
       <div>
         <div class="day-date">${escapeHtml(formatLongDate(day.date))}</div>
+        <div class="day-actions">
+          <button type="button" class="tiny-button" data-quick-add="service" data-date="${escapeHtml(day.date)}">Dienst</button>
+          <button type="button" class="tiny-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin</button>
+          <button type="button" class="tiny-button" data-quick-add="wish" data-date="${escapeHtml(day.date)}">Wens</button>
+        </div>
       </div>
       <div>
         ${hasItems || hasSignals ? `
@@ -657,6 +666,8 @@ function renderQuickEntry() {
   const editingService = getEditingItem("service") || {};
   const editingFamilyBlock = getEditingItem("family") || {};
   const editingWish = getEditingItem("wish") || {};
+  const quickDate = state.quickEntry?.date || "";
+  const quickLabel = quickDate ? formatLongDate(quickDate) : "";
   const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
   const familySubmitLabel = state.editing?.type === "family" ? "Gezinsitem bijwerken" : "Gezinsitem opslaan";
   const wishSubmitLabel = state.editing?.type === "wish" ? "Wens bijwerken" : "Wens opslaan";
@@ -666,12 +677,14 @@ function renderQuickEntry() {
       <section class="panel">
         <p class="eyebrow">Actieve maand</p>
         <h3 class="form-section-title">${escapeHtml(getMonthLabel(month.id))}</h3>
+        ${quickDate ? `<p class="quick-entry-note">Nieuwe invoer voor ${escapeHtml(quickLabel)}. De datum is alvast ingevuld.</p>` : ""}
         <div class="toolbar">
           <button type="button" class="subtle-button" data-view-target="cockpit">Terug naar cockpit</button>
+          ${quickDate ? "<button type=\"button\" class=\"subtle-button\" data-clear-quick-entry>Datum loslaten</button>" : ""}
         </div>
       </section>
 
-      <section class="panel">
+      <section class="panel ${state.quickEntry?.type === "service" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "service" ? "Dienst bewerken" : "Dienst toevoegen"}</h3>
         <form id="service-form" class="form-grid">
           <label>
@@ -682,7 +695,7 @@ function renderQuickEntry() {
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingService.datum || "")}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingService.datum || quickDate)}" required>
           </label>
           <label>
             Start
@@ -723,7 +736,7 @@ function renderQuickEntry() {
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel ${state.quickEntry?.type === "family" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "family" ? "Gezinsverplichting bewerken" : "Gezinsverplichting toevoegen"}</h3>
         <form id="family-block-form" class="form-grid">
           <label>
@@ -734,7 +747,7 @@ function renderQuickEntry() {
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingFamilyBlock.datum || "")}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingFamilyBlock.datum || quickDate)}" required>
           </label>
           <label>
             Start
@@ -769,7 +782,7 @@ function renderQuickEntry() {
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel ${state.quickEntry?.type === "wish" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "wish" ? "Wens bewerken" : "Wens toevoegen"}</h3>
         <form id="wish-form" class="form-grid">
           <label>
@@ -780,7 +793,7 @@ function renderQuickEntry() {
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingWish.datum || "")}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingWish.datum || quickDate)}" required>
           </label>
           <label>
             Type
@@ -1132,11 +1145,26 @@ function finishItemMutation(previousMonthId, monthId, reason) {
 function startEditItem(type, id) {
   if (!getItemByType(type, id)) return;
   state.editing = { type, id };
+  state.quickEntry = null;
   showView("quick-entry");
 }
 
 function cancelEditItem() {
   state.editing = null;
+  renderQuickEntry();
+}
+
+function startQuickEntry(type, date) {
+  const monthId = dateToMonthId(date);
+  if (!getMonth(monthId)) return;
+  state.data.instellingen.actieveMaandId = monthId;
+  state.editing = null;
+  state.quickEntry = { type, date };
+  showView("quick-entry");
+}
+
+function clearQuickEntry() {
+  state.quickEntry = null;
   renderQuickEntry();
 }
 
@@ -1433,6 +1461,7 @@ function bindEvents() {
       }
       if (button.dataset.view !== "quick-entry") {
         state.editing = null;
+        state.quickEntry = null;
       }
       showView(button.dataset.view);
     });
@@ -1458,6 +1487,7 @@ function bindEvents() {
     if (viewButton) {
       if (viewButton.dataset.viewTarget !== "quick-entry") {
         state.editing = null;
+        state.quickEntry = null;
       }
       showView(viewButton.dataset.viewTarget);
     }
@@ -1487,6 +1517,15 @@ function bindEvents() {
 
     if (event.target.closest("[data-cancel-edit]")) {
       cancelEditItem();
+    }
+
+    const quickAddButton = event.target.closest("[data-quick-add]");
+    if (quickAddButton) {
+      startQuickEntry(quickAddButton.dataset.quickAdd, quickAddButton.dataset.date);
+    }
+
+    if (event.target.closest("[data-clear-quick-entry]")) {
+      clearQuickEntry();
     }
   });
 
