@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.5-lokaal";
+const APP_VERSION = "0.1.6-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -234,6 +234,125 @@ function openMonth(monthId) {
   showView("cockpit");
 }
 
+function deleteMonth(monthId) {
+  const month = getMonth(monthId);
+  if (!month) return;
+
+  const counts = getMonthDataCounts(monthId);
+  const ok = window.confirm(`Maand ${getMonthLabel(monthId)} verwijderen?\n\nDiensten: ${counts.services}\nGezinsitems: ${counts.familyBlocks}\nWensen: ${counts.wishes}\nActies: ${counts.actions}\n\nEr wordt eerst een lokale snapshot gemaakt.`);
+  if (!ok) return;
+
+  createSnapshot(`voor_maand_verwijderen_${monthId}`);
+  removeMonthData(monthId);
+  state.data.maandPlanningen = state.data.maandPlanningen.filter((item) => item.id !== monthId);
+
+  if (state.data.instellingen.actieveMaandId === monthId) {
+    state.data.instellingen.actieveMaandId = null;
+    state.editing = null;
+  }
+
+  saveData("maand_verwijderd");
+  showView("months");
+}
+
+function duplicateMonth(monthId) {
+  const month = getMonth(monthId);
+  if (!month) return;
+
+  const targetId = getNextDuplicateMonthId(monthId);
+  const [targetYear, targetMonth] = targetId.split("-").map(Number);
+  const duplicatedMonth = {
+    ...month,
+    id: targetId,
+    jaar: targetYear,
+    maand: targetMonth,
+    samenvattingStatus: "onvolledig",
+    laatstBijgewerkt: new Date().toISOString()
+  };
+
+  state.data.maandPlanningen.push(duplicatedMonth);
+  state.data.maandPlanningen.sort((a, b) => a.id.localeCompare(b.id));
+  duplicateMonthCollection("diensten", monthId, targetId, copyServiceForMonth);
+  duplicateMonthCollection("gezinsVerplichtingen", monthId, targetId, copyFamilyBlockForMonth);
+  duplicateMonthCollection("wensen", monthId, targetId, copyWishForMonth);
+  state.data.instellingen.actieveMaandId = targetId;
+  runAnalysis(targetId);
+  saveData("maand_gedupliceerd");
+  showView("cockpit");
+}
+
+function getNextDuplicateMonthId(monthId) {
+  const [year, month] = monthId.split("-").map(Number);
+  let date = new Date(year, month, 1);
+  let candidate = dateToMonthIdFromParts(date.getFullYear(), date.getMonth() + 1);
+  while (getMonth(candidate)) {
+    date = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+    candidate = dateToMonthIdFromParts(date.getFullYear(), date.getMonth() + 1);
+  }
+  return candidate;
+}
+
+function dateToMonthIdFromParts(year, month) {
+  return `${year}-${String(month).padStart(2, "0")}`;
+}
+
+function duplicateMonthCollection(collectionName, sourceMonthId, targetMonthId, copyFn) {
+  const copies = getMonthItems(sourceMonthId, collectionName).map((item) => copyFn(item, targetMonthId));
+  state.data[collectionName].push(...copies);
+}
+
+function copyServiceForMonth(service, targetMonthId) {
+  return {
+    ...service,
+    id: generateId("dienst"),
+    maandPlanningId: targetMonthId,
+    datum: moveDateToMonth(service.datum, targetMonthId)
+  };
+}
+
+function copyFamilyBlockForMonth(block, targetMonthId) {
+  return {
+    ...block,
+    id: generateId("gezin"),
+    maandPlanningId: targetMonthId,
+    datum: moveDateToMonth(block.datum, targetMonthId)
+  };
+}
+
+function copyWishForMonth(wish, targetMonthId) {
+  return {
+    ...wish,
+    id: generateId("wens"),
+    maandPlanningId: targetMonthId,
+    datum: moveDateToMonth(wish.datum, targetMonthId)
+  };
+}
+
+function moveDateToMonth(dateValue, targetMonthId) {
+  const day = Number(String(dateValue || "").slice(8, 10)) || 1;
+  const [year, month] = targetMonthId.split("-").map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${targetMonthId}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
+}
+
+function removeMonthData(monthId) {
+  MODULE_1_ARRAYS
+    .filter((collectionName) => collectionName !== "maandPlanningen")
+    .forEach((collectionName) => {
+      state.data[collectionName] = state.data[collectionName].filter((item) => item.maandPlanningId !== monthId);
+  });
+}
+
+function getMonthDataCounts(monthId) {
+  return {
+    services: getMonthItems(monthId, "diensten").length,
+    familyBlocks: getMonthItems(monthId, "gezinsVerplichtingen").length,
+    wishes: getMonthItems(monthId, "wensen").length,
+    analyses: getMonthItems(monthId, "analyseResultaten").length,
+    actions: getMonthItems(monthId, "actieItems").length
+  };
+}
+
 function getMonth(monthId) {
   return state.data.maandPlanningen.find((month) => month.id === monthId);
 }
@@ -320,10 +439,12 @@ function renderMonthOverview() {
     const actions = getOpenActions(month.id);
     const serviceCount = getMonthItems(month.id, "diensten").length;
     const familyCount = getMonthItems(month.id, "gezinsVerplichtingen").length;
+    const isActive = state.data.instellingen.actieveMaandId === month.id;
     return `
-      <article class="month-card">
+      <article class="month-card ${isActive ? "month-card-active" : ""}">
         <h3>${escapeHtml(getMonthLabel(month.id))}</h3>
         <div class="cockpit-badges">
+          ${isActive ? "<span class=\"active-month-pill\">Actief</span>" : ""}
           <span class="stage-pill">${escapeHtml(getStageLabel(month.planningStage))}</span>
           <span class="status-pill status-${month.samenvattingStatus}">
             ${escapeHtml(STATUS_LABELS[month.samenvattingStatus] || month.samenvattingStatus)}
@@ -335,7 +456,11 @@ function renderMonthOverview() {
           <div><dt>Gezinsitems</dt><dd>${familyCount}</dd></div>
           <div><dt>Laatst bijgewerkt</dt><dd>${formatDateTime(month.laatstBijgewerkt)}</dd></div>
         </dl>
-        <button type="button" data-open-month="${month.id}">Open maand</button>
+        <div class="month-actions">
+          <button type="button" data-open-month="${month.id}">Open maand</button>
+          <button type="button" class="subtle-button" data-duplicate-month="${month.id}">Dupliceer</button>
+          <button type="button" class="danger-outline-button" data-delete-month="${month.id}">Verwijder</button>
+        </div>
       </article>
     `;
   }).join("");
@@ -377,6 +502,8 @@ function renderMonthCockpit() {
       <div class="toolbar">
         <button type="button" class="subtle-button" data-view-target="months">Terug</button>
         <button type="button" data-view-target="quick-entry">Snelle invoer</button>
+        <button type="button" class="subtle-button" data-duplicate-month="${month.id}">Dupliceer maand</button>
+        <button type="button" class="danger-outline-button" data-delete-month="${month.id}">Verwijder maand</button>
       </div>
     </div>
 
@@ -1315,6 +1442,16 @@ function bindEvents() {
     const openButton = event.target.closest("[data-open-month]");
     if (openButton) {
       openMonth(openButton.dataset.openMonth);
+    }
+
+    const duplicateMonthButton = event.target.closest("[data-duplicate-month]");
+    if (duplicateMonthButton) {
+      duplicateMonth(duplicateMonthButton.dataset.duplicateMonth);
+    }
+
+    const deleteMonthButton = event.target.closest("[data-delete-month]");
+    if (deleteMonthButton) {
+      deleteMonth(deleteMonthButton.dataset.deleteMonth);
     }
 
     const viewButton = event.target.closest("[data-view-target]");

@@ -257,9 +257,24 @@ textarea {
   color: var(--incomplete-text);
 }
 
+.active-month-pill {
+  background: #e7f8ef;
+  color: var(--good-text);
+}
+
 .stage-pill {
   background: #eef4ff;
   color: #244f8f;
+}
+
+.month-card-active {
+  border-color: var(--brand);
+}
+
+.month-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .cockpit-header {
