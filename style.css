@@ -433,6 +433,39 @@ textarea {
   gap: 2px;
 }
 
+.settings-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.settings-tile {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.settings-tile span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.settings-tile-warning {
+  background: var(--attention);
+  border-color: #f0c36d;
+  color: var(--attention-text);
+}
+
+.settings-tile-warning span {
+  color: var(--attention-text);
+}
+
+.settings-duty-list {
+  margin-top: 12px;
+}
+
 .muted-text {
   color: var(--muted);
   margin: 0;

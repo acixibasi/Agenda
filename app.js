@@ -1,130 +1,5 @@
 "use strict";
 
-const APP_VERSION = "0.1.15-lokaal";
-const DATA_VERSION = 1;
-const STORAGE_KEY = "roostercoach.data.v1";
-const SETTINGS_KEY = "roostercoach.settings.v1";
-const SNAPSHOT_KEY = "roostercoach.snapshots.v1";
-const SYNC_KEY = "roostercoach.sync.v1";
-const IMPORT_DRAFT_KEY = "roostercoach.importDraft.v1";
-
-const PLANNING_STAGES = [
-  { value: "R1_wensen", label: "R1 - wensen" },
-  { value: "R2_afstemming", label: "R2 - afstemming" },
-  { value: "R3_manager", label: "R3 - managerfase" },
-  { value: "R4_gepubliceerd", label: "R4 - gepubliceerd" }
-];
-
-const STATUS_LABELS = {
-  goed: "Goed",
-  aandacht: "Aandacht",
-  conflict: "Conflict",
-  onvolledig: "Onvolledig"
-};
-
-const ACTION_PRIORITY_ORDER = {
-  urgent: 0,
-  hoog: 1,
-  normaal: 2,
-  laag: 3
-};
-
-const PERSON_LABELS = {
-  persoon_jij: "Ronald",
-  persoon_vrouw: "Eva"
-};
-
-const DUTY_PERSON_OPTIONS = {
-  persoon_jij: "Ronald",
-  persoon_vrouw: "Eva",
-  beiden: "Beiden"
-};
-
-const CONTRACT_HOURS = {
-  persoon_jij: { weeklyHours: 31.5, monthlyToleranceHours: 9 },
-  persoon_vrouw: { weeklyHours: 27, monthlyToleranceHours: 9 }
-};
-
-const SERVICE_TYPES = [
-  "vroeg",
-  "dag",
-  "laat",
-  "nacht",
-  "vrij",
-  "opleiding",
-  "instructie",
-  "overig"
-];
-
-const DEFAULT_DUTY_NAMES = [
-  { id: "dienstnaam_vroeg", naam: "Vroeg", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "" },
-  { id: "dienstnaam_dag", naam: "Dag", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "" },
-  { id: "dienstnaam_laat", naam: "Laat", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "" },
-  { id: "dienstnaam_nacht", naam: "Nacht", persoonId: "persoon_jij", beschikbaarVanaf: "R2_afstemming", post: "", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "" }
-];
-
-const SERVICE_STATUSES = [
-  "wens",
-  "aangevraagd",
-  "optie",
-  "voorgesteld",
-  "onzeker",
-  "waarschijnlijk",
-  "bevestigd",
-  "gepubliceerd",
-  "ruil_gewenst"
-];
-
-const FAMILY_BLOCK_TYPES = [
-  "school_brengen",
-  "school_halen",
-  "opvang",
-  "sport",
-  "afspraak",
-  "overig"
-];
-
-const WISH_TYPES = [
-  "liever_geen_dienst",
-  "liefst_vrij",
-  "voorkeur_dienst",
-  "samen_vrij",
-  "overig"
-];
-
-const MONTH_NAMES = [
-  "Januari",
-  "Februari",
-  "Maart",
-  "April",
-  "Mei",
-  "Juni",
-  "Juli",
-  "Augustus",
-  "September",
-  "Oktober",
-  "November",
-  "December"
-];
-
-const MODULE_1_ARRAYS = [
-  "personen",
-  "kinderen",
-  "maandPlanningen",
-  "diensten",
-  "keuzeAanvragen",
-  "keuzeOpties",
-  "bronnen",
-  "contextPeriodes",
-  "gezinsVerplichtingen",
-  "beschikbaarheid",
-  "wensen",
-  "regels",
-  "analyseResultaten",
-  "ruilKandidaten",
-  "actieItems"
-];
-
 let state = {
   data: createEmptyData(),
   currentView: "months",
@@ -489,6 +364,7 @@ function renderApp() {
   renderMonthCockpit();
   renderQuickEntry();
   renderActionList();
+  renderSettingsPanel();
   renderStoragePanel();
   focusPendingDay();
 }
@@ -582,6 +458,7 @@ function renderMonthCockpit() {
 
     <div class="stack">
       ${renderControlCenter(controlSummary)}
+      ${renderMonthlyHoursPanel(month)}
 
       <section class="panel">
         <p class="eyebrow">Actiestrook</p>
@@ -1020,6 +897,96 @@ function renderActionStatusButton(action, status, label) {
   if (action.status === status) return "";
   const dangerClass = status === "genegeerd" ? " danger-outline-button" : "";
   return `<button type="button" class="subtle-button${dangerClass}" data-action-status="${status}" data-action-id="${escapeHtml(action.id)}">${label}</button>`;
+}
+
+function renderSettingsPanel() {
+  const panel = document.getElementById("settings-panel");
+  if (!panel) return;
+  const dutyNames = getDutyNames();
+  const dutyRows = dutyNames.length
+    ? dutyNames.map((dutyName) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(dutyName.naam)}</strong>
+            <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen dienstnamen ingesteld.</div>";
+
+  panel.innerHTML = `
+    <section class="panel">
+      <p class="eyebrow">Contracturen</p>
+      <div class="settings-grid">
+        ${Object.entries(CONTRACT_HOURS).map(([personId, contract]) => `
+          <div class="settings-tile">
+            <strong>${escapeHtml(getPersonLabel(personId))}</strong>
+            <span>${escapeHtml(formatHours(contract.weeklyHours))} uur/week</span>
+            <span>Maandmarge ${escapeHtml(formatHours(contract.monthlyToleranceHours))} uur</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Dienstkeuzes</p>
+      <div class="storage-list">
+        <div class="storage-row"><span>Totaal dienstnamen</span><strong>${dutyNames.length}</strong></div>
+        <div class="storage-row"><span>Ronald</span><strong>${dutyNames.filter((item) => item.persoonId === "persoon_jij").length}</strong></div>
+        <div class="storage-row"><span>Eva</span><strong>${dutyNames.filter((item) => item.persoonId === "persoon_vrouw").length}</strong></div>
+        <div class="storage-row"><span>Vanaf R2 extra</span><strong>${dutyNames.filter((item) => item.beschikbaarVanaf === "R2_afstemming").length}</strong></div>
+      </div>
+      <div class="duty-name-list settings-duty-list">
+        ${dutyRows}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Code-indeling</p>
+      <div class="settings-grid">
+        <div class="settings-tile"><strong>config.js</strong><span>Versie, personen, rondes, normen, standaardlijsten</span></div>
+        <div class="settings-tile"><strong>app.js</strong><span>Opslag, rendering, invoer, analyse en events</span></div>
+        <div class="settings-tile"><strong>style.css</strong><span>Vormgeving en responsive gedrag</span></div>
+      </div>
+    </section>
+  `;
+}
+
+function renderMonthlyHoursPanel(month) {
+  const rows = getMonthlyHoursRows(month);
+  return `
+    <section class="panel">
+      <p class="eyebrow">Maanduren</p>
+      <div class="settings-grid">
+        ${rows.map((row) => `
+          <div class="settings-tile ${row.outsideBand ? "settings-tile-warning" : ""}">
+            <strong>${escapeHtml(row.personLabel)}</strong>
+            <span>${escapeHtml(formatHours(row.actualHours))} gewerkt / ${escapeHtml(formatHours(row.targetHours))} norm</span>
+            <span>Verschil ${escapeHtml(formatSignedHours(row.difference))} uur</span>
+          </div>
+        `).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function getMonthlyHoursRows(month) {
+  const services = month ? getMonthItems(month.id, "diensten").filter(isWorkingService) : [];
+  const servicesByPerson = groupBy(services, "persoonId");
+  return Object.entries(CONTRACT_HOURS).map(([personId, contract]) => {
+    const personServices = servicesByPerson[personId] || [];
+    const actualHours = personServices.reduce((total, service) => total + getServiceDurationHours(service), 0);
+    const targetHours = getMonthlyContractTargetHours(month, contract.weeklyHours);
+    const difference = actualHours - targetHours;
+    return {
+      personId,
+      personLabel: getPersonLabel(personId),
+      actualHours,
+      targetHours,
+      difference,
+      outsideBand: Math.abs(difference) > contract.monthlyToleranceHours
+    };
+  });
 }
 
 function renderDutyNameManager(dutyNames, activeStage) {
@@ -2556,6 +2523,11 @@ function formatHours(value) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 1
   });
+}
+
+function formatSignedHours(value) {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${formatHours(value)}`;
 }
 
 function getMonthlyContractTargetHours(month, weeklyHours) {
