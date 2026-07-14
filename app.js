@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.2-lokaal";
+const APP_VERSION = "0.1.3-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -432,14 +432,26 @@ function renderActionList() {
 
 function renderActionCard(action) {
   return `
-    <article class="action-card">
+    <article class="action-card action-status-${escapeHtml(action.status || "open")}">
       <h3>${escapeHtml(action.titel || "Actie")}</h3>
       <p>${escapeHtml(action.type || "actie")} - ${escapeHtml(action.prioriteit || "normaal")} - ${escapeHtml(action.status || "open")}</p>
       ${action.deadline ? `<p>Deadline: ${escapeHtml(formatLongDate(action.deadline))}</p>` : ""}
       ${action.advies ? `<p>${escapeHtml(action.advies)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
+      <div class="action-buttons">
+        ${renderActionStatusButton(action, "bezig", "Zet bezig")}
+        ${renderActionStatusButton(action, "wacht_op_ander", "Wacht op ander")}
+        ${renderActionStatusButton(action, "opgelost", "Markeer opgelost")}
+        ${renderActionStatusButton(action, "genegeerd", "Negeer")}
+      </div>
     </article>
   `;
+}
+
+function renderActionStatusButton(action, status, label) {
+  if (action.status === status) return "";
+  const dangerClass = status === "genegeerd" ? " danger-outline-button" : "";
+  return `<button type="button" class="subtle-button${dangerClass}" data-action-status="${status}" data-action-id="${escapeHtml(action.id)}">${label}</button>`;
 }
 
 function renderQuickEntry() {
@@ -1000,6 +1012,35 @@ function createOrUpdateAction(result) {
   return action;
 }
 
+function updateActionStatus(actionId, status) {
+  const action = state.data.actieItems.find((item) => item.id === actionId);
+  if (!action) return;
+
+  if (status === "genegeerd") {
+    const ok = window.confirm("Deze actie bewust negeren? De actie verdwijnt uit de standaardlijst, maar blijft in de data staan.");
+    if (!ok) return;
+  }
+
+  action.status = status;
+  action.laatstBijgewerkt = new Date().toISOString();
+  updateLinkedAnalysisStatus(action, status);
+  updateMonthStatus(action.maandPlanningId);
+  saveData(`actie_${status}`);
+  renderApp();
+}
+
+function updateLinkedAnalysisStatus(action, status) {
+  const mappedStatus = ["opgelost", "genegeerd"].includes(status) ? status : "open";
+  const linkedIds = Array.isArray(action.gekoppeldeAnalyseIds) ? action.gekoppeldeAnalyseIds : [];
+  state.data.analyseResultaten.forEach((result) => {
+    const linkedById = linkedIds.includes(result.id);
+    const linkedBySignature = action.analyseSignature && result.signature === action.analyseSignature;
+    if (linkedById || linkedBySignature) {
+      result.actieStatus = mappedStatus;
+    }
+  });
+}
+
 function updateMonthStatus(monthId) {
   const month = getMonth(monthId);
   if (!month) return;
@@ -1060,6 +1101,11 @@ function bindEvents() {
 
     if (event.target.closest("[data-clear-local]")) {
       clearLocalData();
+    }
+
+    const actionStatusButton = event.target.closest("[data-action-status]");
+    if (actionStatusButton) {
+      updateActionStatus(actionStatusButton.dataset.actionId, actionStatusButton.dataset.actionStatus);
     }
   });
 

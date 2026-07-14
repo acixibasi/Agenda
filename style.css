@@ -305,6 +305,38 @@ textarea {
   background: #982f2f;
 }
 
+.danger-outline-button {
+  border-color: #c43d3d;
+  color: #982f2f;
+}
+
+.danger-outline-button:hover {
+  background: var(--conflict);
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action-status-bezig {
+  border-left: 4px solid var(--brand);
+}
+
+.action-status-wacht_op_ander {
+  border-left: 4px solid #805700;
+}
+
+.action-status-opgelost {
+  border-left: 4px solid var(--good-text);
+}
+
+.action-status-genegeerd {
+  border-left: 4px solid #982f2f;
+}
+
 .storage-actions {
   display: flex;
   flex-wrap: wrap;
