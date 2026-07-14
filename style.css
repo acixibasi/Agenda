@@ -53,7 +53,7 @@ button:hover {
 }
 
 .app-shell {
-  width: min(1120px, 100%);
+  width: min(1440px, 100%);
   margin: 0 auto;
   padding: 18px;
 }
@@ -605,6 +605,231 @@ textarea {
 
 .cockpit-filter-panel {
   box-shadow: none;
+}
+
+.month-board-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.month-board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.month-board-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 4px 10px;
+}
+
+.legend-item span {
+  display: inline-grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.legend-good span {
+  background: var(--good);
+  color: var(--good-text);
+}
+
+.legend-attention span {
+  background: var(--attention);
+  color: var(--attention-text);
+}
+
+.legend-conflict span {
+  background: var(--conflict);
+  color: var(--conflict-text);
+}
+
+.month-board-scroll {
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.month-board-weekdays,
+.month-board-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(146px, 1fr));
+  gap: 6px;
+  min-width: 1040px;
+}
+
+.month-board-weekdays {
+  margin-bottom: 6px;
+}
+
+.month-board-weekdays div {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.month-board-empty,
+.month-board-day {
+  min-height: 154px;
+  border-radius: 8px;
+}
+
+.month-board-empty {
+  border: 1px dashed var(--line);
+  background: #f9fafb;
+}
+
+.month-board-day {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--text);
+  padding: 8px;
+  text-align: left;
+}
+
+.month-board-day:hover {
+  border-color: var(--brand);
+  background: #f8fbff;
+}
+
+.month-board-day:focus {
+  outline: 3px solid rgba(31, 111, 235, 0.24);
+  outline-offset: 2px;
+}
+
+.month-board-day-selected {
+  border-color: var(--brand);
+  box-shadow: inset 0 0 0 2px rgba(31, 111, 235, 0.18);
+}
+
+.month-board-day-good {
+  border-left: 6px solid var(--good-text);
+}
+
+.month-board-day-attention {
+  border-left: 6px solid var(--attention-text);
+  background: #fffbec;
+}
+
+.month-board-day-conflict {
+  border-left: 6px solid var(--conflict-text);
+  background: #fff7f7;
+}
+
+.month-board-day-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.month-board-day-top strong {
+  font-size: 1.08rem;
+}
+
+.month-board-status {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 900;
+}
+
+.month-board-day-good .month-board-status {
+  background: var(--good);
+  color: var(--good-text);
+}
+
+.month-board-day-attention .month-board-status {
+  background: var(--attention);
+  color: var(--attention-text);
+}
+
+.month-board-day-conflict .month-board-status {
+  background: var(--conflict);
+  color: var(--conflict-text);
+}
+
+.month-board-summary {
+  color: var(--muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.month-board-items {
+  display: grid;
+  gap: 4px;
+  max-height: 92px;
+  overflow: auto;
+}
+
+.month-board-item {
+  display: block;
+  overflow-wrap: anywhere;
+  border-radius: 5px;
+  background: #f4f6f8;
+  color: var(--text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 4px 5px;
+}
+
+.month-board-item-service {
+  background: #eaf2ff;
+  color: #244f8f;
+}
+
+.month-board-item-family {
+  background: #f0ecff;
+  color: #4c3b88;
+}
+
+.month-board-item-wish {
+  background: #eef7f2;
+  color: var(--good-text);
+}
+
+.month-board-item-action {
+  background: var(--attention);
+  color: var(--attention-text);
+}
+
+.month-board-item-analysis {
+  background: var(--incomplete);
+  color: var(--incomplete-text);
+}
+
+.month-board-item-empty {
+  color: var(--muted);
+  font-weight: 600;
 }
 
 .filter-bar {

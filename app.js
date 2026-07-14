@@ -506,6 +506,7 @@ function renderMonthCockpit() {
     <div class="stack">
       ${renderControlCenter(controlSummary)}
       ${renderMonthlyHoursPanel(month)}
+      ${renderMonthBoard(month, days)}
 
       <section class="panel">
         <p class="eyebrow">Actiestrook</p>
@@ -654,6 +655,116 @@ function renderCockpitFilters(filters) {
         `).join("")}
       </div>
     </section>
+  `;
+}
+
+function renderMonthBoard(month, days) {
+  const firstDay = new Date(`${month.id}-01T12:00:00`).getDay();
+  const leadingEmptyDays = (firstDay + 6) % 7;
+  const cells = [
+    ...Array.from({ length: leadingEmptyDays }, () => null),
+    ...days
+  ];
+  const trailingEmptyDays = (7 - (cells.length % 7)) % 7;
+  cells.push(...Array.from({ length: trailingEmptyDays }, () => null));
+
+  return `
+    <section class="panel month-board-panel" aria-label="Volledig maandbord">
+      <div class="month-board-header">
+        <div>
+          <p class="eyebrow">Volledig maandbord</p>
+          <h3 class="form-section-title">${escapeHtml(getMonthLabel(month.id))}</h3>
+        </div>
+        <div class="month-board-legend" aria-label="Legenda">
+          <span class="legend-item legend-good"><span>✓</span> Geen conflict</span>
+          <span class="legend-item legend-attention"><span>!</span> Controle</span>
+          <span class="legend-item legend-conflict"><span>X</span> Conflict</span>
+        </div>
+      </div>
+      <div class="month-board-scroll">
+        <div class="month-board-weekdays" aria-hidden="true">
+          ${WEEKDAY_OPTIONS.map((day) => `<div>${escapeHtml(day.label)}</div>`).join("")}
+        </div>
+        <div class="month-board-grid">
+          ${cells.map((day) => day ? renderMonthBoardDay(day) : "<div class=\"month-board-empty\" aria-hidden=\"true\"></div>").join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderMonthBoardDay(day) {
+  const status = getDayBoardStatus(day);
+  const isSelected = state.selectedDate === day.date;
+  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length;
+  const signalCount = day.analyses.length + day.actions.length;
+  return `
+    <button type="button" class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
+      <span class="month-board-day-top">
+        <strong>${Number(day.date.slice(-2))}</strong>
+        <span class="month-board-status" aria-hidden="true">${escapeHtml(status.icon)}</span>
+      </span>
+      <span class="month-board-summary">${itemCount} items - ${signalCount} signalen</span>
+      <span class="month-board-items">
+        ${day.services.map(renderMonthBoardService).join("")}
+        ${day.familyBlocks.map(renderMonthBoardFamilyBlock).join("")}
+        ${day.wishes.map(renderMonthBoardWish).join("")}
+        ${day.actions.map(renderMonthBoardAction).join("")}
+        ${day.analyses.map(renderMonthBoardAnalysis).join("")}
+        ${!itemCount && !signalCount ? "<span class=\"month-board-item month-board-item-empty\">Geen invoer</span>" : ""}
+      </span>
+    </button>
+  `;
+}
+
+function getDayBoardStatus(day) {
+  const activeAnalyses = day.analyses.filter((result) => !["gezien", "bewust_akkoord", "vervallen"].includes(result.actieStatus));
+  if (activeAnalyses.some((result) => result.ernst === "conflict")) {
+    return { type: "conflict", icon: "X", label: "conflict" };
+  }
+  if (activeAnalyses.length || day.actions.length) {
+    return { type: "attention", icon: "!", label: "controle nodig" };
+  }
+  return { type: "good", icon: "✓", label: "geen conflict" };
+}
+
+function renderMonthBoardService(service) {
+  return `
+    <span class="month-board-item month-board-item-service">
+      ${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))} ${escapeHtml(formatTimeRange(service.start, service.einde))}
+    </span>
+  `;
+}
+
+function renderMonthBoardFamilyBlock(block) {
+  return `
+    <span class="month-board-item month-board-item-family">
+      Gezin: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}
+    </span>
+  `;
+}
+
+function renderMonthBoardWish(wish) {
+  return `
+    <span class="month-board-item month-board-item-wish">
+      Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}
+    </span>
+  `;
+}
+
+function renderMonthBoardAction(action) {
+  return `
+    <span class="month-board-item month-board-item-action">
+      Actie: ${escapeHtml(action.titel || "open actie")}
+    </span>
+  `;
+}
+
+function renderMonthBoardAnalysis(result) {
+  return `
+    <span class="month-board-item month-board-item-analysis signal-${escapeHtml(result.ernst)}">
+      ${escapeHtml(formatCodeLabel(result.ernst))}: ${escapeHtml(result.melding || "controlepunt")}
+    </span>
   `;
 }
 
