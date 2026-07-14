@@ -98,9 +98,16 @@ function normalizeDutyNames(value) {
       dienstType: SERVICE_TYPES.includes(dutyName.dienstType) ? dutyName.dienstType : "overig",
       start: dutyName.start || "",
       einde: dutyName.einde || "",
-      locatie: String(dutyName.locatie || "").trim()
+      locatie: String(dutyName.locatie || "").trim(),
+      beschikbareDagen: normalizeDutyWeekdays(dutyName.beschikbareDagen)
     }))
     .filter((dutyName) => dutyName.naam);
+}
+
+function normalizeDutyWeekdays(value) {
+  const validDays = new Set(WEEKDAY_OPTIONS.map((day) => day.value));
+  const source = Array.isArray(value) && value.length ? value : WEEKDAY_OPTIONS.map((day) => day.value);
+  return [...new Set(source.map(String).filter((day) => validDays.has(day)))];
 }
 
 function loadData() {
@@ -1031,12 +1038,28 @@ function renderSettingsDutyNameForm(editingDutyName = null) {
         Locatie/detail
         <input name="locatie" type="text" value="${escapeHtml(dutyName.locatie || "")}" placeholder="Optioneel">
       </label>
+      <fieldset class="weekday-fieldset">
+        <legend>Dagen beschikbaar</legend>
+        <div class="weekday-options">
+          ${renderWeekdayCheckboxes(dutyName.beschikbareDagen)}
+        </div>
+      </fieldset>
       <div class="form-actions">
         <button type="submit">${submitLabel}</button>
         ${editingDutyName ? "<button type=\"button\" class=\"subtle-button\" data-cancel-duty-edit>Annuleer</button>" : ""}
       </div>
     </form>
   `;
+}
+
+function renderWeekdayCheckboxes(selectedDays = null) {
+  const selected = new Set(normalizeDutyWeekdays(selectedDays));
+  return WEEKDAY_OPTIONS.map((day) => `
+    <label class="checkbox-label">
+      <input name="beschikbareDagen" type="checkbox" value="${escapeHtml(day.value)}"${selected.has(day.value) ? " checked" : ""}>
+      ${escapeHtml(day.label)}
+    </label>
+  `).join("");
 }
 
 function renderMonthlyHoursPanel(month) {
@@ -1106,10 +1129,20 @@ function getDutyNameMeta(dutyName) {
     person,
     `vanaf ${stage}`,
     dutyName.post || dutyName.locatie,
+    getDutyWeekdayLabel(dutyName.beschikbareDagen),
     formatCodeLabel(dutyName.dienstType),
     formatTimeRange(dutyName.start, dutyName.einde)
   ].filter(Boolean);
   return parts.join(" - ");
+}
+
+function getDutyWeekdayLabel(days) {
+  const normalized = normalizeDutyWeekdays(days);
+  if (normalized.length === WEEKDAY_OPTIONS.length) return "alle dagen";
+  const labels = WEEKDAY_OPTIONS
+    .filter((day) => normalized.includes(day.value))
+    .map((day) => day.label);
+  return labels.join("/");
 }
 
 function updateDutyNameVisibility() {
@@ -1117,11 +1150,13 @@ function updateDutyNameVisibility() {
   const activeMonth = getMonth(state.data.instellingen.actieveMaandId);
   const activeStage = activeMonth?.planningStage || state.data.instellingen.standaardPlanningStage;
   const selectedPersonId = form?.elements.persoonId?.value || "persoon_jij";
+  const selectedDate = form?.elements.datum?.value || "";
   const buttons = Array.from(document.querySelectorAll("[data-apply-duty-name]"));
   let visibleCount = 0;
 
   buttons.forEach((button) => {
-    const visible = isDutyNameAvailableFor(button.dataset.dutyPerson, button.dataset.dutyRound, selectedPersonId, activeStage);
+    const dutyName = getDutyNames().find((item) => item.id === button.dataset.applyDutyName);
+    const visible = dutyName && isDutyNameAvailableFor(dutyName, selectedPersonId, activeStage, selectedDate);
     button.hidden = !visible;
     if (visible) visibleCount += 1;
   });
@@ -1130,10 +1165,19 @@ function updateDutyNameVisibility() {
   if (emptyMessage) emptyMessage.hidden = visibleCount > 0 || !buttons.length;
 }
 
-function isDutyNameAvailableFor(dutyPersonId, dutyStage, selectedPersonId, activeStage) {
-  const personMatches = dutyPersonId === "beiden" || dutyPersonId === selectedPersonId;
+function isDutyNameAvailableFor(dutyName, selectedPersonId, activeStage, selectedDate = "") {
+  const personMatches = dutyName.persoonId === "beiden" || dutyName.persoonId === selectedPersonId;
   if (!personMatches) return false;
-  return getPlanningStageIndex(activeStage) >= getPlanningStageIndex(dutyStage);
+  const roundMatches = getPlanningStageIndex(activeStage) >= getPlanningStageIndex(dutyName.beschikbaarVanaf);
+  if (!roundMatches) return false;
+  return isDutyNameAvailableOnDate(dutyName, selectedDate);
+}
+
+function isDutyNameAvailableOnDate(dutyName, dateValue) {
+  if (!dateValue) return true;
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return true;
+  return normalizeDutyWeekdays(dutyName.beschikbareDagen).includes(String(date.getDay()));
 }
 
 function getPlanningStageIndex(stageValue) {
@@ -1584,7 +1628,8 @@ function addDutyName(input) {
     dienstType: SERVICE_TYPES.includes(input.dienstType) ? input.dienstType : "overig",
     start: input.start || "",
     einde: input.einde || "",
-    locatie: String(input.locatie || "").trim()
+    locatie: String(input.locatie || "").trim(),
+    beschikbareDagen: normalizeDutyWeekdays(getFormArrayValue(input.beschikbareDagen))
   };
 
   if (!dutyName.naam || !dutyName.start || !dutyName.einde) return;
@@ -1654,6 +1699,12 @@ function getDutyNameKey(dutyName) {
     dutyName.beschikbaarVanaf || "",
     String(dutyName.post || "").trim().toLowerCase()
   ].join("|");
+}
+
+function getFormArrayValue(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === "") return [];
+  return [value];
 }
 
 function addFamilyBlock(input) {
@@ -2520,7 +2571,7 @@ function bindEvents() {
   });
 
   document.addEventListener("change", (event) => {
-    if (event.target.matches("#service-form select[name='persoonId']")) {
+    if (event.target.matches("#service-form select[name='persoonId'], #service-form input[name='datum']")) {
       updateDutyNameVisibility();
     }
 
@@ -2555,7 +2606,16 @@ function dateToMonthId(date) {
 }
 
 function formToObject(form) {
-  return Object.fromEntries(new FormData(form).entries());
+  const data = {};
+  const formData = new FormData(form);
+  formData.forEach((value, key) => {
+    if (Object.prototype.hasOwnProperty.call(data, key)) {
+      data[key] = Array.isArray(data[key]) ? [...data[key], value] : [data[key], value];
+      return;
+    }
+    data[key] = value;
+  });
+  return data;
 }
 
 function getPersonLabel(personId) {

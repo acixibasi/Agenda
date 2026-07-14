@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.19-lokaal";
+const APP_VERSION = "0.1.20-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -54,6 +54,16 @@ const SERVICE_TYPES = [
   "opleiding",
   "instructie",
   "overig"
+];
+
+const WEEKDAY_OPTIONS = [
+  { value: "1", label: "Ma" },
+  { value: "2", label: "Di" },
+  { value: "3", label: "Wo" },
+  { value: "4", label: "Do" },
+  { value: "5", label: "Vr" },
+  { value: "6", label: "Za" },
+  { value: "0", label: "Zo" }
 ];
 
 const DEFAULT_DUTY_NAMES = [

@@ -482,6 +482,37 @@ textarea {
   padding-top: 12px;
 }
 
+.weekday-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin: 0;
+  padding: 8px 10px;
+}
+
+.weekday-fieldset legend {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  padding: 0 4px;
+}
+
+.weekday-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkbox-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 5px;
+}
+
+.checkbox-label input {
+  min-height: auto;
+  width: auto;
+}
+
 .muted-text {
   color: var(--muted);
   margin: 0;
