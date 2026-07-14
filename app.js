@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.10-lokaal";
+const APP_VERSION = "0.1.11-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -112,7 +112,8 @@ let state = {
   currentView: "months",
   editing: null,
   quickEntry: null,
-  selectedDate: null
+  selectedDate: null,
+  pendingFocusDate: null
 };
 
 function createEmptyData() {
@@ -433,6 +434,7 @@ function renderApp() {
   renderQuickEntry();
   renderActionList();
   renderStoragePanel();
+  focusPendingDay();
 }
 
 function renderMonthOverview() {
@@ -667,7 +669,7 @@ function renderDayRow(day) {
   const hasSignals = day.analyses.length || day.actions.length;
   const isSelected = state.selectedDate === day.date;
   return `
-    <article class="day-row ${hasSignals ? "day-row-signal" : ""} ${isSelected ? "day-row-selected" : ""}">
+    <article class="day-row ${hasSignals ? "day-row-signal" : ""} ${isSelected ? "day-row-selected" : ""}" data-day-row="${escapeHtml(day.date)}">
       <div>
         <div class="day-date">${escapeHtml(formatLongDate(day.date))}</div>
         <div class="day-actions">
@@ -732,7 +734,7 @@ function renderDayDetail(day) {
   const hasActions = day.actions.length > 0;
 
   return `
-    <section class="panel day-detail" aria-live="polite">
+    <section class="panel day-detail" data-day-detail="${escapeHtml(day.date)}" tabindex="-1" aria-live="polite">
       <div class="day-detail-header">
         <div>
           <p class="eyebrow">Dagdetails</p>
@@ -1418,7 +1420,23 @@ function openDay(date) {
   state.editing = null;
   state.quickEntry = null;
   state.selectedDate = date;
+  state.pendingFocusDate = date;
   showView("cockpit");
+}
+
+function focusPendingDay() {
+  if (!state.pendingFocusDate || state.currentView !== "cockpit") return;
+  const date = state.pendingFocusDate;
+  state.pendingFocusDate = null;
+  const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
+  schedule(() => {
+    const detail = document.querySelector(`[data-day-detail="${cssEscape(date)}"]`);
+    const row = document.querySelector(`[data-day-row="${cssEscape(date)}"]`);
+    const target = detail || row;
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (typeof target.focus === "function") target.focus({ preventScroll: true });
+  });
 }
 
 function rerunMonthControl(monthId) {
@@ -2071,6 +2089,13 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function cssEscape(value) {
+  if (window.CSS && typeof window.CSS.escape === "function") {
+    return window.CSS.escape(String(value));
+  }
+  return String(value).replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }
 
 document.addEventListener("DOMContentLoaded", () => {
