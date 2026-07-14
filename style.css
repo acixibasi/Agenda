@@ -321,6 +321,12 @@ textarea {
   margin-top: 10px;
 }
 
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .action-history {
   border-top: 1px solid var(--line);
   display: grid;
@@ -426,8 +432,41 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #f9fafb;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 8px;
   font-size: 0.9rem;
+}
+
+.editable-item {
+  flex-wrap: wrap;
+}
+
+.item-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.tiny-button {
+  min-height: 28px;
+  border-color: var(--line);
+  background: #fff;
+  color: var(--text);
+  font-size: 0.8rem;
+  padding: 0 8px;
+}
+
+.tiny-button:hover {
+  background: #eef4ff;
+}
+
+.danger-text-button {
+  color: #982f2f;
+}
+
+.danger-text-button:hover {
+  background: var(--conflict);
 }
 
 .day-row-signal {

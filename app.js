@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.4-lokaal";
+const APP_VERSION = "0.1.5-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -109,7 +109,8 @@ const MODULE_1_ARRAYS = [
 
 let state = {
   data: createEmptyData(),
-  currentView: "months"
+  currentView: "months",
+  editing: null
 };
 
 function createEmptyData() {
@@ -227,6 +228,7 @@ function createMonth(year, month, planningStage) {
 }
 
 function openMonth(monthId) {
+  state.editing = null;
   state.data.instellingen.actieveMaandId = monthId;
   saveData("maand_geopend");
   showView("cockpit");
@@ -419,13 +421,22 @@ function renderDayRow(day) {
         ${hasItems || hasSignals ? `
           <div class="item-list">
             ${day.services.map((service) => `
-              <span class="mini-item">${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
+              <span class="mini-item editable-item">
+                <span>${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
+                ${renderItemButtons("service", service.id)}
+              </span>
             `).join("")}
             ${day.familyBlocks.map((block) => `
-              <span class="mini-item">${escapeHtml(formatCodeLabel(block.type || "Gezin"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+              <span class="mini-item editable-item">
+                <span>${escapeHtml(formatCodeLabel(block.type || "Gezin"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+                ${renderItemButtons("family", block.id)}
+              </span>
             `).join("")}
             ${day.wishes.map((wish) => `
-              <span class="mini-item">Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>
+              <span class="mini-item editable-item">
+                <span>Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>
+                ${renderItemButtons("wish", wish.id)}
+              </span>
             `).join("")}
             ${day.analyses.map((result) => `
               <span class="mini-item signal-${escapeHtml(result.ernst)}">${escapeHtml(formatCodeLabel(result.ernst))}: ${escapeHtml(result.melding)}</span>
@@ -434,6 +445,15 @@ function renderDayRow(day) {
         ` : "<span class=\"mini-item\">Geen items</span>"}
       </div>
     </article>
+  `;
+}
+
+function renderItemButtons(type, id) {
+  return `
+    <span class="item-actions">
+      <button type="button" class="tiny-button" data-edit-item="${escapeHtml(type)}" data-item-id="${escapeHtml(id)}">Bewerk</button>
+      <button type="button" class="tiny-button danger-text-button" data-delete-item="${escapeHtml(type)}" data-item-id="${escapeHtml(id)}">Verwijder</button>
+    </span>
   `;
 }
 
@@ -507,6 +527,12 @@ function renderQuickEntry() {
   const lastDay = String(new Date(month.jaar, month.maand, 0).getDate()).padStart(2, "0");
   const minDate = `${month.id}-01`;
   const maxDate = `${month.id}-${lastDay}`;
+  const editingService = getEditingItem("service") || {};
+  const editingFamilyBlock = getEditingItem("family") || {};
+  const editingWish = getEditingItem("wish") || {};
+  const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
+  const familySubmitLabel = state.editing?.type === "family" ? "Gezinsitem bijwerken" : "Gezinsitem opslaan";
+  const wishSubmitLabel = state.editing?.type === "wish" ? "Wens bijwerken" : "Wens opslaan";
 
   content.innerHTML = `
     <div class="stack">
@@ -519,129 +545,138 @@ function renderQuickEntry() {
       </section>
 
       <section class="panel">
-        <h3 class="form-section-title">Dienst toevoegen</h3>
+        <h3 class="form-section-title">${state.editing?.type === "service" ? "Dienst bewerken" : "Dienst toevoegen"}</h3>
         <form id="service-form" class="form-grid">
           <label>
             Persoon
             <select name="persoonId" required>
-              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS)}
+              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS, editingService.persoonId || "persoon_jij")}
             </select>
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingService.datum || "")}" required>
           </label>
           <label>
             Start
-            <input name="start" type="time" required>
+            <input name="start" type="time" value="${escapeHtml(editingService.start || "")}" required>
           </label>
           <label>
             Einde
-            <input name="einde" type="time" required>
+            <input name="einde" type="time" value="${escapeHtml(editingService.einde || "")}" required>
           </label>
           <label>
             Diensttype
             <select name="dienstType" required>
-              ${renderOptions(SERVICE_TYPES)}
+              ${renderOptions(SERVICE_TYPES, null, editingService.dienstType || "")}
             </select>
           </label>
           <label>
             Status
             <select name="status" required>
-              ${renderOptions(SERVICE_STATUSES, null, "gepubliceerd")}
+              ${renderOptions(SERVICE_STATUSES, null, editingService.status || "gepubliceerd")}
             </select>
           </label>
           <label>
             Dienstcode
-            <input name="dienstCode" type="text" placeholder="Bijv. C, D, L">
+            <input name="dienstCode" type="text" value="${escapeHtml(editingService.dienstCode || "")}" placeholder="Bijv. C, D, L">
           </label>
           <label>
             Locatie
-            <input name="locatie" type="text" placeholder="Bijv. Zuid">
+            <input name="locatie" type="text" value="${escapeHtml(editingService.locatie || "")}" placeholder="Bijv. Zuid">
           </label>
           <label class="full-width">
             Opmerking
-            <textarea name="opmerking" placeholder="Korte notitie"></textarea>
+            <textarea name="opmerking" placeholder="Korte notitie">${escapeHtml(editingService.opmerking || "")}</textarea>
           </label>
-          <button type="submit">Dienst opslaan</button>
+          <div class="form-actions full-width">
+            <button type="submit">${serviceSubmitLabel}</button>
+            ${state.editing?.type === "service" ? "<button type=\"button\" class=\"subtle-button\" data-cancel-edit>Annuleer bewerken</button>" : ""}
+          </div>
         </form>
       </section>
 
       <section class="panel">
-        <h3 class="form-section-title">Gezinsverplichting toevoegen</h3>
+        <h3 class="form-section-title">${state.editing?.type === "family" ? "Gezinsverplichting bewerken" : "Gezinsverplichting toevoegen"}</h3>
         <form id="family-block-form" class="form-grid">
           <label>
             Type
             <select name="type" required>
-              ${renderOptions(FAMILY_BLOCK_TYPES)}
+              ${renderOptions(FAMILY_BLOCK_TYPES, null, editingFamilyBlock.type || "")}
             </select>
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingFamilyBlock.datum || "")}" required>
           </label>
           <label>
             Start
-            <input name="start" type="time" required>
+            <input name="start" type="time" value="${escapeHtml(editingFamilyBlock.start || "")}" required>
           </label>
           <label>
             Einde
-            <input name="einde" type="time" required>
+            <input name="einde" type="time" value="${escapeHtml(editingFamilyBlock.einde || "")}" required>
           </label>
           <label>
             Hardheid
             <select name="hardheid" required>
-              <option value="hard">Hard</option>
-              <option value="zacht">Zacht</option>
+              <option value="hard"${selectedAttr(editingFamilyBlock.hardheid || "hard", "hard")}>Hard</option>
+              <option value="zacht"${selectedAttr(editingFamilyBlock.hardheid || "hard", "zacht")}>Zacht</option>
             </select>
           </label>
           <label>
             Dekking nodig
             <select name="dekkingNodig" required>
-              <option value="true">Ja</option>
-              <option value="false">Nee</option>
+              <option value="true"${selectedAttr(String(editingFamilyBlock.dekkingNodig ?? true), "true")}>Ja</option>
+              <option value="false"${selectedAttr(String(editingFamilyBlock.dekkingNodig ?? true), "false")}>Nee</option>
             </select>
           </label>
           <label class="full-width">
             Opmerking
-            <textarea name="opmerking" placeholder="Bijv. school uit, opvang dicht"></textarea>
+            <textarea name="opmerking" placeholder="Bijv. school uit, opvang dicht">${escapeHtml(editingFamilyBlock.opmerking || "")}</textarea>
           </label>
-          <button type="submit">Gezinsitem opslaan</button>
+          <div class="form-actions full-width">
+            <button type="submit">${familySubmitLabel}</button>
+            ${state.editing?.type === "family" ? "<button type=\"button\" class=\"subtle-button\" data-cancel-edit>Annuleer bewerken</button>" : ""}
+          </div>
         </form>
       </section>
 
       <section class="panel">
-        <h3 class="form-section-title">Wens toevoegen</h3>
+        <h3 class="form-section-title">${state.editing?.type === "wish" ? "Wens bewerken" : "Wens toevoegen"}</h3>
         <form id="wish-form" class="form-grid">
           <label>
             Persoon
             <select name="persoonId" required>
-              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS)}
+              ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS, editingWish.persoonId || "persoon_jij")}
             </select>
           </label>
           <label>
             Datum
-            <input name="datum" type="date" min="${minDate}" max="${maxDate}" required>
+            <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingWish.datum || "")}" required>
           </label>
           <label>
             Type
             <select name="type" required>
-              ${renderOptions(WISH_TYPES)}
+              ${renderOptions(WISH_TYPES, null, editingWish.type || "")}
             </select>
           </label>
           <label>
             Prioriteit
             <select name="prioriteit" required>
-              <option value="hoog">Hoog</option>
-              <option value="normaal">Normaal</option>
-              <option value="laag">Laag</option>
+              <option value="hoog"${selectedAttr(editingWish.prioriteit || "normaal", "hoog")}>Hoog</option>
+              <option value="normaal"${selectedAttr(editingWish.prioriteit || "normaal", "normaal")}>Normaal</option>
+              <option value="laag"${selectedAttr(editingWish.prioriteit || "normaal", "laag")}>Laag</option>
             </select>
           </label>
           <label class="full-width">
             Reden
-            <textarea name="reden" placeholder="Waarom is deze wens belangrijk?"></textarea>
+            <textarea name="reden" placeholder="Waarom is deze wens belangrijk?">${escapeHtml(editingWish.reden || "")}</textarea>
           </label>
-          <button type="submit">Wens opslaan</button>
+          <div class="form-actions full-width">
+            <button type="submit">${wishSubmitLabel}</button>
+            ${state.editing?.type === "wish" ? "<button type=\"button\" class=\"subtle-button\" data-cancel-edit>Annuleer bewerken</button>" : ""}
+          </div>
         </form>
       </section>
     </div>
@@ -818,6 +853,11 @@ function buildMonthDays(month) {
 
 function addService(input) {
   const monthId = dateToMonthId(input.datum);
+  if (state.editing?.type === "service") {
+    updateService(state.editing.id, input);
+    return;
+  }
+
   const service = {
     id: generateId("dienst"),
     persoonId: input.persoonId,
@@ -841,8 +881,36 @@ function addService(input) {
   showView("cockpit");
 }
 
+function updateService(id, input) {
+  const service = state.data.diensten.find((item) => item.id === id);
+  if (!service) return;
+  const previousMonthId = service.maandPlanningId;
+  const monthId = dateToMonthId(input.datum);
+
+  Object.assign(service, {
+    persoonId: input.persoonId,
+    maandPlanningId: monthId,
+    datum: input.datum,
+    start: input.start,
+    einde: input.einde,
+    dienstCode: input.dienstCode.trim(),
+    dienstType: input.dienstType,
+    locatie: input.locatie.trim(),
+    roosterLaag: input.dienstType === "instructie" ? "instructie" : "regulier",
+    status: input.status,
+    opmerking: input.opmerking.trim()
+  });
+
+  finishItemMutation(previousMonthId, monthId, "dienst_bijgewerkt");
+}
+
 function addFamilyBlock(input) {
   const monthId = dateToMonthId(input.datum);
+  if (state.editing?.type === "family") {
+    updateFamilyBlock(state.editing.id, input);
+    return;
+  }
+
   const familyBlock = {
     id: generateId("gezin"),
     maandPlanningId: monthId,
@@ -862,8 +930,33 @@ function addFamilyBlock(input) {
   showView("cockpit");
 }
 
+function updateFamilyBlock(id, input) {
+  const familyBlock = state.data.gezinsVerplichtingen.find((item) => item.id === id);
+  if (!familyBlock) return;
+  const previousMonthId = familyBlock.maandPlanningId;
+  const monthId = dateToMonthId(input.datum);
+
+  Object.assign(familyBlock, {
+    maandPlanningId: monthId,
+    type: input.type,
+    datum: input.datum,
+    start: input.start,
+    einde: input.einde,
+    hardheid: input.hardheid,
+    dekkingNodig: input.dekkingNodig === "true",
+    opmerking: input.opmerking.trim()
+  });
+
+  finishItemMutation(previousMonthId, monthId, "gezinsverplichting_bijgewerkt");
+}
+
 function addWish(input) {
   const monthId = dateToMonthId(input.datum);
+  if (state.editing?.type === "wish") {
+    updateWish(state.editing.id, input);
+    return;
+  }
+
   const wish = {
     id: generateId("wens"),
     persoonId: input.persoonId,
@@ -879,6 +972,101 @@ function addWish(input) {
   runAnalysis(monthId);
   saveData("wens_toegevoegd");
   showView("cockpit");
+}
+
+function updateWish(id, input) {
+  const wish = state.data.wensen.find((item) => item.id === id);
+  if (!wish) return;
+  const previousMonthId = wish.maandPlanningId;
+  const monthId = dateToMonthId(input.datum);
+
+  Object.assign(wish, {
+    persoonId: input.persoonId,
+    maandPlanningId: monthId,
+    type: input.type,
+    datum: input.datum,
+    prioriteit: input.prioriteit,
+    reden: input.reden.trim()
+  });
+
+  finishItemMutation(previousMonthId, monthId, "wens_bijgewerkt");
+}
+
+function finishItemMutation(previousMonthId, monthId, reason) {
+  state.editing = null;
+  if (previousMonthId && previousMonthId !== monthId) {
+    runAnalysis(previousMonthId);
+  }
+  runAnalysis(monthId);
+  saveData(reason);
+  openMonth(monthId);
+}
+
+function startEditItem(type, id) {
+  if (!getItemByType(type, id)) return;
+  state.editing = { type, id };
+  showView("quick-entry");
+}
+
+function cancelEditItem() {
+  state.editing = null;
+  renderQuickEntry();
+}
+
+function deleteScheduleItem(type, id) {
+  const item = getItemByType(type, id);
+  if (!item) return;
+  const label = getItemTypeLabel(type);
+  const ok = window.confirm(`${label} verwijderen?\n\nDe analyse en acties worden daarna opnieuw bijgewerkt.`);
+  if (!ok) return;
+
+  const monthId = item.maandPlanningId;
+  const collectionName = getCollectionNameForType(type);
+  state.data[collectionName] = state.data[collectionName].filter((entry) => entry.id !== id);
+  if (state.editing?.type === type && state.editing.id === id) {
+    state.editing = null;
+  }
+  runAnalysis(monthId);
+  saveData(`${getItemTypeLogName(type)}_verwijderd`);
+  renderApp();
+}
+
+function getEditingItem(type) {
+  if (state.editing?.type !== type) return null;
+  return getItemByType(type, state.editing.id);
+}
+
+function getItemByType(type, id) {
+  const collectionName = getCollectionNameForType(type);
+  if (!collectionName) return null;
+  return state.data[collectionName].find((item) => item.id === id) || null;
+}
+
+function getCollectionNameForType(type) {
+  const collections = {
+    service: "diensten",
+    family: "gezinsVerplichtingen",
+    wish: "wensen"
+  };
+  return collections[type] || "";
+}
+
+function getItemTypeLabel(type) {
+  const labels = {
+    service: "Dienst",
+    family: "Gezinsverplichting",
+    wish: "Wens"
+  };
+  return labels[type] || "Item";
+}
+
+function getItemTypeLogName(type) {
+  const names = {
+    service: "dienst",
+    family: "gezinsverplichting",
+    wish: "wens"
+  };
+  return names[type] || "item";
 }
 
 function runAnalysis(monthId) {
@@ -1116,6 +1304,9 @@ function bindEvents() {
         showView("months");
         return;
       }
+      if (button.dataset.view !== "quick-entry") {
+        state.editing = null;
+      }
       showView(button.dataset.view);
     });
   });
@@ -1128,6 +1319,9 @@ function bindEvents() {
 
     const viewButton = event.target.closest("[data-view-target]");
     if (viewButton) {
+      if (viewButton.dataset.viewTarget !== "quick-entry") {
+        state.editing = null;
+      }
       showView(viewButton.dataset.viewTarget);
     }
 
@@ -1142,6 +1336,20 @@ function bindEvents() {
     const actionStatusButton = event.target.closest("[data-action-status]");
     if (actionStatusButton) {
       updateActionStatus(actionStatusButton.dataset.actionId, actionStatusButton.dataset.actionStatus);
+    }
+
+    const editButton = event.target.closest("[data-edit-item]");
+    if (editButton) {
+      startEditItem(editButton.dataset.editItem, editButton.dataset.itemId);
+    }
+
+    const deleteButton = event.target.closest("[data-delete-item]");
+    if (deleteButton) {
+      deleteScheduleItem(deleteButton.dataset.deleteItem, deleteButton.dataset.itemId);
+    }
+
+    if (event.target.closest("[data-cancel-edit]")) {
+      cancelEditItem();
     }
   });
 
@@ -1205,6 +1413,10 @@ function renderOptions(values, labels = null, selectedValue = "") {
     const selected = value === selectedValue ? " selected" : "";
     return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
   }).join("");
+}
+
+function selectedAttr(currentValue, optionValue) {
+  return String(currentValue) === String(optionValue) ? " selected" : "";
 }
 
 function formatCodeLabel(value) {
