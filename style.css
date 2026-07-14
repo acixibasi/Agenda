@@ -301,6 +301,10 @@ textarea {
   gap: 8px;
 }
 
+.family-template-actions {
+  margin: 12px 0;
+}
+
 .subtle-button {
   border-color: var(--line);
   background: #fff;

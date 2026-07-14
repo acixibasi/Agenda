@@ -1137,6 +1137,9 @@ function renderSettingsPanel() {
         <div class="storage-row"><span>Totaal sjablonen</span><strong>${familyTemplates.length}</strong></div>
         <div class="storage-row"><span>Dekking nodig</span><strong>${familyTemplates.filter((item) => item.dekkingNodig).length}</strong></div>
       </div>
+      <div class="toolbar family-template-actions">
+        <button type="button" data-auto-place-family-templates>Vaste gezinsmomenten in actieve maand zetten</button>
+      </div>
       ${renderSettingsFamilyTemplateForm(editingFamilyTemplate)}
       <div class="duty-name-list settings-duty-list">
         ${familyTemplateRows}
@@ -1363,6 +1366,7 @@ function renderFamilyTemplateManager(templates) {
       </div>
       <p class="muted-text duty-empty-message" data-family-template-empty-message>Geen vast gezinsmoment voor deze datum.</p>
       <div class="toolbar">
+        <button type="button" data-auto-place-family-templates>Zet alles in deze maand</button>
         <button type="button" class="subtle-button" data-view-target="settings">Beheer vaste gezinsmomenten</button>
       </div>
     </div>
@@ -2091,6 +2095,83 @@ function applyFamilyTemplate(id) {
   form.elements.dekkingNodig.value = String(template.dekkingNodig);
   form.elements.opmerking.value = template.opmerking || template.naam;
   updateFamilyTemplateVisibility();
+}
+
+function autoPlaceFamilyTemplatesForActiveMonth() {
+  const monthId = state.data.instellingen.actieveMaandId;
+  const month = monthId ? getMonth(monthId) : null;
+  if (!month) {
+    window.alert("Open eerst een maand. Daarna kunnen vaste gezinsmomenten automatisch worden geplaatst.");
+    return;
+  }
+
+  const templates = getFamilyTemplates();
+  if (!templates.length) {
+    window.alert("Er zijn nog geen vaste gezinsmomenten ingesteld in Beheer.");
+    return;
+  }
+
+  const dates = getMonthDateValues(month);
+  let added = 0;
+  let skipped = 0;
+
+  templates.forEach((template) => {
+    dates.forEach((date) => {
+      if (!isFamilyTemplateAvailableOnDate(template, date)) return;
+      const familyBlock = createFamilyBlockFromTemplate(template, date, month.id);
+      if (familyBlockExists(familyBlock)) {
+        skipped += 1;
+        return;
+      }
+      state.data.gezinsVerplichtingen.push(familyBlock);
+      added += 1;
+    });
+  });
+
+  if (!added) {
+    window.alert(`Geen nieuwe gezinsmomenten toegevoegd. ${skipped} moment(en) stonden al in ${getMonthLabel(month.id)}.`);
+    return;
+  }
+
+  state.selectedDate = dates[0] || `${month.id}-01`;
+  runAnalysis(month.id);
+  saveData("gezinsmomenten_automatisch_geplaatst");
+  window.alert(`${added} gezinsmoment(en) toegevoegd aan ${getMonthLabel(month.id)}. ${skipped} bestaande moment(en) overgeslagen.`);
+  showView("cockpit");
+}
+
+function getMonthDateValues(month) {
+  const daysInMonth = new Date(month.jaar, month.maand, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    return `${month.id}-${String(index + 1).padStart(2, "0")}`;
+  });
+}
+
+function createFamilyBlockFromTemplate(template, date, monthId) {
+  return {
+    id: generateId("gezin"),
+    maandPlanningId: monthId,
+    type: template.type,
+    kindId: "",
+    datum: date,
+    start: template.start,
+    einde: template.einde,
+    hardheid: template.hardheid,
+    dekkingNodig: Boolean(template.dekkingNodig),
+    opmerking: template.opmerking || template.naam,
+    sourceTemplateId: template.id
+  };
+}
+
+function familyBlockExists(candidate) {
+  return state.data.gezinsVerplichtingen.some((block) => {
+    if (block.maandPlanningId !== candidate.maandPlanningId || block.datum !== candidate.datum) return false;
+    if (block.sourceTemplateId && block.sourceTemplateId === candidate.sourceTemplateId) return true;
+    return block.type === candidate.type &&
+      block.start === candidate.start &&
+      block.einde === candidate.einde &&
+      String(block.opmerking || "").trim().toLowerCase() === String(candidate.opmerking || "").trim().toLowerCase();
+  });
 }
 
 function getDutyNameKey(dutyName) {
@@ -2870,6 +2951,11 @@ function bindEvents() {
     const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
     if (applyFamilyTemplateButton) {
       applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
+      return;
+    }
+
+    if (event.target.closest("[data-auto-place-family-templates]")) {
+      autoPlaceFamilyTemplatesForActiveMonth();
       return;
     }
 
