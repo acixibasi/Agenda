@@ -301,6 +301,25 @@ textarea {
   gap: 8px;
 }
 
+.stage-select-label {
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--muted);
+  padding: 0 8px 0 10px;
+}
+
+.stage-select-label select {
+  min-height: 32px;
+  border: 0;
+  padding: 0 4px;
+}
+
 .family-template-actions {
   margin: 12px 0;
 }

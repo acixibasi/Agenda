@@ -351,6 +351,12 @@ function getStageLabel(stage) {
   return match ? match.label : stage;
 }
 
+function getNextPlanningStage(stage) {
+  const index = PLANNING_STAGES.findIndex((item) => item.value === stage);
+  if (index === -1 || index >= PLANNING_STAGES.length - 1) return null;
+  return PLANNING_STAGES[index + 1];
+}
+
 function getOpenActions(monthId) {
   return state.data.actieItems.filter((action) => {
     const inMonth = !monthId || action.maandPlanningId === monthId;
@@ -482,6 +488,7 @@ function renderMonthCockpit() {
   const controlSummary = buildControlSummary(month, days);
   const dayFilters = buildDayFilters(days);
   const filteredDays = filterMonthDays(days, state.cockpitFilter);
+  const nextStage = getNextPlanningStage(month.planningStage);
 
   content.innerHTML = `
     <div class="cockpit-header">
@@ -498,6 +505,13 @@ function renderMonthCockpit() {
       <div class="toolbar">
         <button type="button" class="subtle-button" data-view-target="months">Terug</button>
         <button type="button" data-view-target="quick-entry">Snelle invoer</button>
+        ${nextStage ? `<button type="button" data-advance-month-stage="${escapeHtml(month.id)}">Zet naar ${escapeHtml(nextStage.label)}</button>` : "<button type=\"button\" class=\"subtle-button\" disabled>Laatste ronde</button>"}
+        <label class="stage-select-label">
+          Ronde
+          <select data-month-stage-select="${escapeHtml(month.id)}">
+            ${PLANNING_STAGES.map((stage) => `<option value="${escapeHtml(stage.value)}"${selectedAttr(month.planningStage, stage.value)}>${escapeHtml(stage.label)}</option>`).join("")}
+          </select>
+        </label>
         <button type="button" class="subtle-button" data-duplicate-month="${month.id}">Dupliceer maand</button>
         <button type="button" class="danger-outline-button" data-delete-month="${month.id}">Verwijder maand</button>
       </div>
@@ -2354,6 +2368,23 @@ function rerunMonthControl(monthId) {
   renderApp();
 }
 
+function advanceMonthStage(monthId) {
+  const month = getMonth(monthId);
+  const nextStage = month ? getNextPlanningStage(month.planningStage) : null;
+  if (!month || !nextStage) return;
+  setMonthStage(monthId, nextStage.value);
+}
+
+function setMonthStage(monthId, stageValue) {
+  const month = getMonth(monthId);
+  if (!month || !PLANNING_STAGES.some((stage) => stage.value === stageValue)) return;
+  if (month.planningStage === stageValue) return;
+  month.planningStage = stageValue;
+  runAnalysis(monthId);
+  saveData("maandronde_bijgewerkt");
+  renderApp();
+}
+
 function deleteScheduleItem(type, id) {
   const item = getItemByType(type, id);
   if (!item) return;
@@ -2930,6 +2961,12 @@ function bindEvents() {
       rerunMonthControl(runAnalysisButton.dataset.runAnalysis);
     }
 
+    const advanceStageButton = event.target.closest("[data-advance-month-stage]");
+    if (advanceStageButton) {
+      advanceMonthStage(advanceStageButton.dataset.advanceMonthStage);
+      return;
+    }
+
     const filterButton = event.target.closest("[data-cockpit-filter]");
     if (filterButton) {
       setCockpitFilter(filterButton.dataset.cockpitFilter);
@@ -3088,6 +3125,11 @@ function bindEvents() {
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-month-stage-select]")) {
+      setMonthStage(event.target.dataset.monthStageSelect, event.target.value);
+      return;
+    }
+
     if (event.target.matches("#service-form select[name='persoonId'], #service-form input[name='datum']")) {
       updateDutyNameVisibility();
     }
