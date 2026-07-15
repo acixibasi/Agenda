@@ -26,6 +26,7 @@ function createEmptyData() {
       standaardPlanningStage: "R1_wensen",
       contractUren: getDefaultContractHours(),
       dienstNamen: getDefaultDutyNames(),
+      reistijdStandaardIngesteld: true,
       gezinsSjablonen: [],
       wensSjablonen: []
     },
@@ -53,6 +54,11 @@ function normalizeData(raw) {
     ...(incoming.instellingen || {})
   };
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
+  normalized.instellingen.reistijdStandaardIngesteld = Boolean(incoming.instellingen?.reistijdStandaardIngesteld);
+  if (!normalized.instellingen.reistijdStandaardIngesteld) {
+    normalized.instellingen.dienstNamen = applyDefaultTravelMinutes(normalized.instellingen.dienstNamen);
+    normalized.instellingen.reistijdStandaardIngesteld = true;
+  }
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
   normalized.instellingen.wensSjablonen = normalizeWishTemplates([
@@ -119,6 +125,17 @@ function normalizeDutyNames(value) {
       beschikbareDagen: normalizeDutyWeekdays(dutyName.beschikbareDagen)
     }))
     .filter((dutyName) => dutyName.naam);
+}
+
+function applyDefaultTravelMinutes(dutyNames) {
+  return dutyNames.map((dutyName) => {
+    if (!["persoon_jij", "persoon_vrouw", "beiden"].includes(dutyName.persoonId)) return dutyName;
+    return {
+      ...dutyName,
+      reistijdVoorMinuten: dutyName.reistijdVoorMinuten || DEFAULT_TRAVEL_MINUTES,
+      reistijdNaMinuten: dutyName.reistijdNaMinuten || DEFAULT_TRAVEL_MINUTES
+    };
+  });
 }
 
 function normalizeDutyWeekdays(value) {
