@@ -495,6 +495,7 @@ function renderMonthCockpit() {
   const selectedDay = getSelectedDayForMonth(month, days);
   const controlSummary = buildControlSummary(month, days);
   const adviceReadiness = buildAdviceReadiness(month, days, controlSummary);
+  const sleutelSummary = buildSleutelSummary(month, days);
   const dayFilters = buildDayFilters(days);
   const filteredDays = filterMonthDays(days, state.cockpitFilter);
   const nextStage = getNextPlanningStage(month.planningStage);
@@ -528,6 +529,7 @@ function renderMonthCockpit() {
 
     <div class="stack">
       ${renderControlCenter(controlSummary)}
+      ${renderSleutelPanel(sleutelSummary)}
       ${renderAdvicePreparation(adviceReadiness)}
       ${renderMonthlyHoursPanel(month)}
       ${renderMonthBoard(month, days)}
@@ -637,6 +639,69 @@ function renderControlCenter(summary) {
         ${renderOkDays(summary.okDays)}
       </div>
     </section>
+  `;
+}
+
+function buildSleutelSummary(month, days) {
+  const services = getMonthItems(month.id, "diensten");
+  const checked = services.filter((service) => service.sleutelAkkoord);
+  const open = services.filter((service) => !service.sleutelAkkoord);
+  const openByDay = days
+    .map((day) => ({
+      date: day.date,
+      services: day.services.filter((service) => !service.sleutelAkkoord)
+    }))
+    .filter((day) => day.services.length);
+  const stageIndex = getPlanningStageIndex(month.planningStage);
+  return {
+    month,
+    services,
+    checked,
+    open,
+    openByDay,
+    active: stageIndex >= getPlanningStageIndex("R2_afstemming")
+  };
+}
+
+function renderSleutelPanel(summary) {
+  const percentage = summary.services.length ? Math.round((summary.checked.length / summary.services.length) * 100) : 0;
+  return `
+    <section class="panel sleutel-panel ${summary.active ? "sleutel-panel-active" : ""}">
+      <div class="control-header">
+        <div>
+          <p class="eyebrow">Ronde 2 sleutelen</p>
+          <h3 class="form-section-title">${summary.open.length ? `${summary.open.length} dienst(en) nog checken` : "Alles afgevinkt"}</h3>
+          <p class="control-meta">${summary.active ? "Vink diensten af als ze overeenkomen met het werkgeversysteem en er niet gesleuteld hoeft te worden." : "Deze checklist is vooral bedoeld voor R2. Je kunt hem alvast vullen."}</p>
+        </div>
+        <span class="status-pill ${summary.open.length ? "advice-status-aanvullen" : "advice-status-klaar"}">${percentage}% klaar</span>
+      </div>
+
+      <div class="advice-grid">
+        ${renderAdviceMetric("Diensten", summary.services.length)}
+        ${renderAdviceMetric("Afgevinkt", summary.checked.length)}
+        ${renderAdviceMetric("Nog checken", summary.open.length)}
+        ${renderAdviceMetric("Dagen open", summary.openByDay.length)}
+      </div>
+
+      ${summary.open.length ? `
+        <div class="sleutel-list">
+          ${summary.open.slice(0, 12).map(renderSleutelServiceRow).join("")}
+        </div>
+        ${summary.open.length > 12 ? `<p class="control-meta">Nog ${summary.open.length - 12} dienst(en) niet getoond in deze lijst. Ze staan wel in de maandkalender.</p>` : ""}
+      ` : "<p class=\"muted-text\">Geen sleutelpunt open. De maand is lokaal afgevinkt tegen het werkgeversysteem.</p>"}
+    </section>
+  `;
+}
+
+function renderSleutelServiceRow(service) {
+  return `
+    <article class="sleutel-row">
+      <div>
+        <strong>${escapeHtml(formatLongDate(service.datum))}</strong>
+        <span>${escapeHtml(formatServiceLabel(service))}</span>
+      </div>
+      <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">Klopt, geen sleutelen nodig</button>
+    </article>
   `;
 }
 
@@ -953,10 +1018,15 @@ function getDayBoardStatus(day) {
 
 function renderMonthBoardService(service) {
   return `
-    <span class="month-board-item month-board-item-service">
-      ${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))} ${escapeHtml(formatTimeRange(service.start, service.einde))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}
+    <span class="month-board-item month-board-item-service ${service.sleutelAkkoord ? "month-board-item-checked" : "month-board-item-unchecked"}">
+      <span class="sleutel-mark">${service.sleutelAkkoord ? "[x]" : "[ ]"}</span>
+      ${escapeHtml(formatServiceLabel(service))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}
     </span>
   `;
+}
+
+function formatServiceLabel(service) {
+  return `${getPersonLabel(service.persoonId)}: ${service.dienstCode || formatCodeLabel(service.dienstType || "dienst")} ${formatTimeRange(service.start, service.einde)}`;
 }
 
 function renderMonthBoardFamilyBlock(block) {
@@ -1086,7 +1156,7 @@ function renderDayRow(day) {
           <div class="item-list">
             ${day.services.map((service) => `
               <span class="mini-item editable-item">
-                <span>${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}</span>
+                <span>${service.sleutelAkkoord ? "[x]" : "[ ]"} ${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}</span>
                 ${renderItemButtons("service", service.id)}
               </span>
             `).join("")}
@@ -1187,9 +1257,13 @@ function renderServiceDetail(service) {
     <article class="detail-item">
       <strong>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))}</strong>
       <span>${escapeHtml(formatTimeRange(service.start, service.einde))} ${service.locatie ? `- ${escapeHtml(service.locatie)}` : ""}</span>
+      <span>Ronde 2 check: ${service.sleutelAkkoord ? "klopt / geen sleutelen nodig" : "nog controleren of sleutelen"}</span>
       ${getServiceTravelLabel(service) ? `<span>${escapeHtml(getServiceTravelLabel(service))}${service.reisOpmerking ? ` - ${escapeHtml(service.reisOpmerking)}` : ""}</span>` : ""}
       <span>${escapeHtml(formatCodeLabel(service.status || "status onbekend"))}</span>
       ${service.opmerking ? `<span>${escapeHtml(service.opmerking)}</span>` : ""}
+      <div class="action-buttons">
+        <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">${service.sleutelAkkoord ? "Zet terug naar checken" : "Klopt, geen sleutelen nodig"}</button>
+      </div>
       ${renderItemButtons("service", service.id)}
     </article>
   `;
@@ -1891,6 +1965,12 @@ function bindEvents() {
       updateActionStatus(actionStatusButton.dataset.actionId, actionStatusButton.dataset.actionStatus);
     }
 
+    const toggleSleutelButton = event.target.closest("[data-toggle-sleutel-service]");
+    if (toggleSleutelButton) {
+      toggleServiceSleutelStatus(toggleSleutelButton.dataset.toggleSleutelService);
+      return;
+    }
+
     const openDayButton = event.target.closest("[data-open-day]");
     if (openDayButton) {
       openDay(openDayButton.dataset.openDay);
@@ -2057,6 +2137,15 @@ function formToObject(form) {
     data[key] = value;
   });
   return data;
+}
+
+function toggleServiceSleutelStatus(serviceId) {
+  const service = state.data.diensten.find((item) => item.id === serviceId);
+  if (!service) return;
+  service.sleutelAkkoord = !service.sleutelAkkoord;
+  state.selectedDate = service.datum;
+  saveData(service.sleutelAkkoord ? "dienst_sleutel_akkoord" : "dienst_sleutel_heropend");
+  renderApp();
 }
 
 function getPersonLabel(personId) {

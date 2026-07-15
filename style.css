@@ -736,6 +736,46 @@ textarea {
   white-space: pre-wrap;
 }
 
+.sleutel-panel {
+  border-left: 5px solid var(--attention-text);
+  display: grid;
+  gap: 14px;
+}
+
+.sleutel-panel-active {
+  border-left-color: var(--brand);
+}
+
+.sleutel-list {
+  display: grid;
+  gap: 8px;
+}
+
+.sleutel-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 10px;
+}
+
+.sleutel-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.sleutel-row span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sleutel-mark {
+  font-weight: 900;
+  margin-right: 4px;
+}
+
 .cockpit-filter-panel {
   box-shadow: none;
 }
@@ -938,6 +978,16 @@ textarea {
 .month-board-item-service {
   background: #eaf2ff;
   color: #244f8f;
+}
+
+.month-board-item-checked {
+  background: var(--good);
+  color: var(--good-text);
+}
+
+.month-board-item-unchecked {
+  background: var(--attention);
+  color: var(--attention-text);
 }
 
 .month-board-item-family {

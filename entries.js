@@ -140,6 +140,7 @@ function addService(input) {
     status: input.status,
     bronId: "bron_handmatig",
     ruilbaar: "onbekend",
+    sleutelAkkoord: false,
     reistijdVoorMinuten: travel.reistijdVoorMinuten,
     reistijdNaMinuten: travel.reistijdNaMinuten,
     reisOpmerking: travel.reisOpmerking,
