@@ -474,6 +474,7 @@ function buildControlSummary(month, days) {
   const incomplete = analyses.filter((item) => item.ernst === "onvolledig");
   const notifications = analyses.filter((item) => item.ernst === "notificatie");
   const closedNotifications = getClosedNotifications(month.id);
+  const wishTemplates = getWishTemplates().filter((template) => template.actief);
   const okDays = days.filter((day) => {
     const hasContent = day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length;
     const hasProblem = day.analyses.length || day.actions.length;
@@ -489,6 +490,7 @@ function buildControlSummary(month, days) {
     incomplete,
     notifications,
     closedNotifications,
+    wishTemplates,
     openActions,
     okDays,
     checkedAt: month.laatstBijgewerkt
@@ -528,6 +530,7 @@ function renderControlCenter(summary) {
       </div>
 
       <div class="control-columns">
+        ${renderWishTemplateContext(summary.wishTemplates)}
         ${renderControlSection("Conflicten", summary.conflicts, "Geen harde conflicten.", "conflict")}
         ${renderControlSection("Te controleren", summary.checks, "Geen controlepunten.", "attention")}
         ${renderControlSection("Notificaties", summary.notifications, "Geen zachte notificaties.", "notification")}
@@ -536,6 +539,40 @@ function renderControlCenter(summary) {
         ${renderOkDays(summary.okDays)}
       </div>
     </section>
+  `;
+}
+
+function renderWishTemplateContext(templates) {
+  const grouped = groupBy(templates, "hardheid");
+  const order = ["hard", "sterk", "normaal", "zacht"];
+  return `
+    <div class="control-section control-section-preferences">
+      <h4>Voorkeuren voor deze maand</h4>
+      ${templates.length ? order.map((hardheid) => {
+        const items = grouped[hardheid] || [];
+        if (!items.length) return "";
+        return `
+          <div class="preference-group">
+            <strong>${escapeHtml(WISH_TEMPLATE_STRENGTH[hardheid] || formatCodeLabel(hardheid))}</strong>
+            ${items.map(renderWishTemplateContextItem).join("")}
+          </div>
+        `;
+      }).join("") : "<p class=\"muted-text\">Geen actieve wenssjablonen.</p>"}
+      ${templates.length ? "<p class=\"control-meta\">Deze voorkeuren zijn context. Ze tellen nog niet automatisch mee als waarschuwing.</p>" : ""}
+    </div>
+  `;
+}
+
+function renderWishTemplateContextItem(template) {
+  const category = WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie);
+  const scope = WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope);
+  const timing = WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing);
+  return `
+    <article class="control-finding preference-finding">
+      <strong>${escapeHtml(template.naam)}</strong>
+      <span>${escapeHtml(category)} - ${escapeHtml(scope)} - ${escapeHtml(timing)}</span>
+      ${template.beschrijving ? `<span>${escapeHtml(template.beschrijving)}</span>` : ""}
+    </article>
   `;
 }
 

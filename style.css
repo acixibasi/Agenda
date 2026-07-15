@@ -902,6 +902,17 @@ textarea {
   margin: 0;
 }
 
+.preference-group {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.preference-group > strong {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
 .control-finding {
   background: #f9fafb;
   border: 1px solid var(--line);
