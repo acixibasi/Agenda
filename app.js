@@ -707,6 +707,7 @@ function renderSleutelServiceRow(service) {
       </div>
       <div class="sleutel-row-actions">
         <button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk dienst</button>
+        <button type="button" class="tiny-button danger-text-button" data-delete-item="service" data-item-id="${escapeHtml(service.id)}">Verwijder dienst</button>
         <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">Klopt, geen sleutelen nodig</button>
       </div>
     </article>
@@ -1360,6 +1361,7 @@ function renderControlFinding(result) {
       <strong>${escapeHtml(result.melding || "Controlepunt")}</strong>
       ${result.advies ? `<span>${isNotification ? "Notificatie" : "Hard advies"}: ${escapeHtml(result.advies)}</span>` : ""}
       ${isClosedNotification ? `<span class="control-meta">Status: ${escapeHtml(formatCodeLabel(result.actieStatus))}</span>` : ""}
+      ${renderLinkedServiceActions(result)}
       ${isNotification ? renderNotificationButtons(result) : ""}
     </article>
   `;
@@ -1380,6 +1382,30 @@ function renderNotificationButtons(result) {
       <button type="button" class="tiny-button" data-notification-status="bewust_akkoord" data-analysis-id="${escapeHtml(result.id)}">Bewust akkoord</button>
     </div>
   `;
+}
+
+function renderLinkedServiceActions(result) {
+  const services = getLinkedServices(result);
+  if (!services.length) return "";
+  return `
+    <div class="linked-service-actions">
+      ${services.map((service) => `
+        <div class="linked-service-action-row">
+          <span>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
+          <button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk</button>
+          <button type="button" class="tiny-button danger-text-button" data-delete-item="service" data-item-id="${escapeHtml(service.id)}">Verwijder</button>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function getLinkedServices(result) {
+  const ids = Array.isArray(result.betrokkenDienstIds) ? result.betrokkenDienstIds : [];
+  if (!ids.length) return [];
+  return ids
+    .map((id) => state.data.diensten.find((service) => service.id === id))
+    .filter(Boolean);
 }
 
 function renderOkDays(days) {
@@ -1531,9 +1557,10 @@ function renderServiceDetail(service) {
         </div>
       ` : ""}
       <div class="action-buttons">
+        <button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk dienst</button>
+        <button type="button" class="tiny-button danger-text-button" data-delete-item="service" data-item-id="${escapeHtml(service.id)}">Verwijder dienst</button>
         <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">${service.sleutelAkkoord ? "Zet terug naar checken" : "Klopt, geen sleutelen nodig"}</button>
       </div>
-      ${renderItemButtons("service", service.id)}
     </article>
   `;
 }
@@ -2245,19 +2272,22 @@ function bindEvents() {
       return;
     }
 
-    const openDayButton = event.target.closest("[data-open-day]");
-    if (openDayButton) {
-      openDay(openDayButton.dataset.openDay);
-    }
-
     const editButton = event.target.closest("[data-edit-item]");
     if (editButton) {
       startEditItem(editButton.dataset.editItem, editButton.dataset.itemId);
+      return;
     }
 
     const deleteButton = event.target.closest("[data-delete-item]");
     if (deleteButton) {
       deleteScheduleItem(deleteButton.dataset.deleteItem, deleteButton.dataset.itemId);
+      return;
+    }
+
+    const openDayButton = event.target.closest("[data-open-day]");
+    if (openDayButton) {
+      openDay(openDayButton.dataset.openDay);
+      return;
     }
 
     if (event.target.closest("[data-cancel-edit]")) {

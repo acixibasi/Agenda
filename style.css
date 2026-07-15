@@ -1203,6 +1203,28 @@ textarea {
   margin-top: 4px;
 }
 
+.linked-service-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.linked-service-action-row {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.linked-service-action-row span {
+  color: var(--text);
+  font-weight: 700;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }
