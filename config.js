@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.41-lokaal";
+const APP_VERSION = "0.1.42-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -67,10 +67,10 @@ const WEEKDAY_OPTIONS = [
 ];
 
 const DEFAULT_DUTY_NAMES = [
-  { id: "dienstnaam_vroeg", naam: "Vroeg", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "" },
-  { id: "dienstnaam_dag", naam: "Dag", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "" },
-  { id: "dienstnaam_laat", naam: "Laat", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "" },
-  { id: "dienstnaam_nacht", naam: "Nacht", persoonId: "persoon_jij", beschikbaarVanaf: "R2_afstemming", post: "", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "" }
+  { id: "dienstnaam_vroeg", naam: "Vroeg", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "vroeg", start: "07:00", einde: "15:00", locatie: "", reistijdVoorMinuten: 0, reistijdNaMinuten: 0, reisOpmerking: "" },
+  { id: "dienstnaam_dag", naam: "Dag", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "", reistijdVoorMinuten: 0, reistijdNaMinuten: 0, reisOpmerking: "" },
+  { id: "dienstnaam_laat", naam: "Laat", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "", reistijdVoorMinuten: 0, reistijdNaMinuten: 0, reisOpmerking: "" },
+  { id: "dienstnaam_nacht", naam: "Nacht", persoonId: "persoon_jij", beschikbaarVanaf: "R2_afstemming", post: "", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "", reistijdVoorMinuten: 0, reistijdNaMinuten: 0, reisOpmerking: "" }
 ];
 
 const SERVICE_STATUSES = [

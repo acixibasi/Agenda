@@ -113,6 +113,9 @@ function normalizeDutyNames(value) {
       start: dutyName.start || "",
       einde: dutyName.einde || "",
       locatie: String(dutyName.locatie || "").trim(),
+      reistijdVoorMinuten: toPositiveNumber(dutyName.reistijdVoorMinuten, 0),
+      reistijdNaMinuten: toPositiveNumber(dutyName.reistijdNaMinuten, 0),
+      reisOpmerking: String(dutyName.reisOpmerking || "").trim(),
       beschikbareDagen: normalizeDutyWeekdays(dutyName.beschikbareDagen)
     }))
     .filter((dutyName) => dutyName.naam);
@@ -894,7 +897,7 @@ function getDayBoardStatus(day) {
 function renderMonthBoardService(service) {
   return `
     <span class="month-board-item month-board-item-service">
-      ${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))} ${escapeHtml(formatTimeRange(service.start, service.einde))}
+      ${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))} ${escapeHtml(formatTimeRange(service.start, service.einde))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}
     </span>
   `;
 }
@@ -1026,7 +1029,7 @@ function renderDayRow(day) {
           <div class="item-list">
             ${day.services.map((service) => `
               <span class="mini-item editable-item">
-                <span>${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}</span>
+                <span>${escapeHtml(getPersonLabel(service.persoonId))} ${escapeHtml(service.dienstCode || service.dienstType || "dienst")} ${escapeHtml(formatTimeRange(service.start, service.einde))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}</span>
                 ${renderItemButtons("service", service.id)}
               </span>
             `).join("")}
@@ -1127,6 +1130,7 @@ function renderServiceDetail(service) {
     <article class="detail-item">
       <strong>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))}</strong>
       <span>${escapeHtml(formatTimeRange(service.start, service.einde))} ${service.locatie ? `- ${escapeHtml(service.locatie)}` : ""}</span>
+      ${getServiceTravelLabel(service) ? `<span>${escapeHtml(getServiceTravelLabel(service))}${service.reisOpmerking ? ` - ${escapeHtml(service.reisOpmerking)}` : ""}</span>` : ""}
       <span>${escapeHtml(formatCodeLabel(service.status || "status onbekend"))}</span>
       ${service.opmerking ? `<span>${escapeHtml(service.opmerking)}</span>` : ""}
       ${renderItemButtons("service", service.id)}
@@ -1427,6 +1431,9 @@ function renderQuickEntry() {
             Locatie
             <input name="locatie" type="text" value="${escapeHtml(editingService.locatie || "")}" placeholder="Bijv. Zuid">
           </label>
+          <input name="reistijdVoorMinuten" type="hidden" value="${escapeHtml(editingService.reistijdVoorMinuten || 0)}">
+          <input name="reistijdNaMinuten" type="hidden" value="${escapeHtml(editingService.reistijdNaMinuten || 0)}">
+          <input name="reisOpmerking" type="hidden" value="${escapeHtml(editingService.reisOpmerking || "")}">
           <label class="full-width">
             Opmerking
             <textarea name="opmerking" placeholder="Korte notitie">${escapeHtml(editingService.opmerking || "")}</textarea>
@@ -2093,6 +2100,13 @@ function isWorkingService(service) {
   return service.dienstType !== "vrij" && getServiceDurationHours(service) > 0;
 }
 
+function getServiceTravelLabel(service) {
+  const before = getServiceTravelMinutes(service, "before");
+  const after = getServiceTravelMinutes(service, "after");
+  if (!before && !after) return "";
+  return `reis ${before}/${after} min`;
+}
+
 function serviceDateTime(service, point) {
   const time = point === "end" ? service.einde : service.start;
   const minutes = timeToMinutes(time);
@@ -2104,6 +2118,27 @@ function serviceDateTime(service, point) {
     date.setDate(date.getDate() + 1);
   }
   return date;
+}
+
+function serviceBusyDateTime(service, point) {
+  const date = serviceDateTime(service, point === "end" ? "end" : "start");
+  if (!date) return null;
+  if (point === "start") {
+    date.setMinutes(date.getMinutes() - getServiceTravelMinutes(service, "before"));
+  } else {
+    date.setMinutes(date.getMinutes() + getServiceTravelMinutes(service, "after"));
+  }
+  return date;
+}
+
+function getServiceTravelMinutes(service, direction) {
+  const field = direction === "after" ? "reistijdNaMinuten" : "reistijdVoorMinuten";
+  const direct = toPositiveNumber(service[field], 0);
+  if (direct) return direct;
+  const dutyName = findDutyNameForServiceInput(service);
+  if (!dutyName) return 0;
+  const fallbackField = direction === "after" ? "reistijdNaMinuten" : "reistijdVoorMinuten";
+  return toPositiveNumber(dutyName[fallbackField], 0);
 }
 
 function getServiceDurationHours(service) {

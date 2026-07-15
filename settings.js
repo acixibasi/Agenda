@@ -338,6 +338,18 @@ function renderSettingsDutyNameForm(editingDutyName = null) {
         Locatie/detail
         <input name="locatie" type="text" value="${escapeHtml(dutyName.locatie || "")}" placeholder="Optioneel">
       </label>
+      <label>
+        Reistijd vóór dienst
+        <input name="reistijdVoorMinuten" type="number" min="0" step="5" value="${escapeHtml(dutyName.reistijdVoorMinuten || 0)}">
+      </label>
+      <label>
+        Reistijd na dienst
+        <input name="reistijdNaMinuten" type="number" min="0" step="5" value="${escapeHtml(dutyName.reistijdNaMinuten || 0)}">
+      </label>
+      <label class="full-width">
+        Reisopmerking
+        <textarea name="reisOpmerking" placeholder="Bijv. ochtendspits richting post duurt vaak langer">${escapeHtml(dutyName.reisOpmerking || "")}</textarea>
+      </label>
       <fieldset class="weekday-fieldset">
         <legend>Dagen beschikbaar</legend>
         <div class="weekday-options">
@@ -499,9 +511,17 @@ function getDutyNameMeta(dutyName) {
     dutyName.post || dutyName.locatie,
     getDutyWeekdayLabel(dutyName.beschikbareDagen),
     formatCodeLabel(dutyName.dienstType),
-    formatTimeRange(dutyName.start, dutyName.einde)
+    formatTimeRange(dutyName.start, dutyName.einde),
+    getDutyTravelLabel(dutyName)
   ].filter(Boolean);
   return parts.join(" - ");
+}
+
+function getDutyTravelLabel(dutyName) {
+  const before = toPositiveNumber(dutyName.reistijdVoorMinuten, 0);
+  const after = toPositiveNumber(dutyName.reistijdNaMinuten, 0);
+  if (!before && !after) return "";
+  return `reis ${before}/${after} min`;
 }
 
 function getDutyWeekdayLabel(days) {
@@ -752,6 +772,9 @@ function addDutyName(input) {
     start: input.start || "",
     einde: input.einde || "",
     locatie: String(input.locatie || "").trim(),
+    reistijdVoorMinuten: toPositiveNumber(input.reistijdVoorMinuten, 0),
+    reistijdNaMinuten: toPositiveNumber(input.reistijdNaMinuten, 0),
+    reisOpmerking: String(input.reisOpmerking || "").trim(),
     beschikbareDagen: normalizeDutyWeekdays(getFormArrayValue(input.beschikbareDagen))
   };
 
@@ -813,6 +836,9 @@ function applyDutyName(id) {
   form.elements.dienstType.value = dutyName.dienstType;
   form.elements.start.value = dutyName.start;
   form.elements.einde.value = dutyName.einde;
+  form.elements.reistijdVoorMinuten.value = dutyName.reistijdVoorMinuten || 0;
+  form.elements.reistijdNaMinuten.value = dutyName.reistijdNaMinuten || 0;
+  form.elements.reisOpmerking.value = dutyName.reisOpmerking || "";
   if (dutyName.post || dutyName.locatie) {
     form.elements.locatie.value = dutyName.post || dutyName.locatie;
   }

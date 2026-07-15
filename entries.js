@@ -124,6 +124,7 @@ function addService(input) {
   }
 
   if (!validateServiceDutyAvailability(input)) return;
+  const travel = getServiceTravelInput(input);
 
   const service = {
     id: generateId("dienst"),
@@ -139,6 +140,9 @@ function addService(input) {
     status: input.status,
     bronId: "bron_handmatig",
     ruilbaar: "onbekend",
+    reistijdVoorMinuten: travel.reistijdVoorMinuten,
+    reistijdNaMinuten: travel.reistijdNaMinuten,
+    reisOpmerking: travel.reisOpmerking,
     opmerking: input.opmerking.trim()
   };
 
@@ -156,6 +160,7 @@ function updateService(id, input) {
   const monthId = dateToMonthId(input.datum);
 
   if (!validateServiceDutyAvailability(input)) return;
+  const travel = getServiceTravelInput(input);
 
   Object.assign(service, {
     persoonId: input.persoonId,
@@ -168,6 +173,9 @@ function updateService(id, input) {
     locatie: input.locatie.trim(),
     roosterLaag: input.dienstType === "instructie" ? "instructie" : "regulier",
     status: input.status,
+    reistijdVoorMinuten: travel.reistijdVoorMinuten,
+    reistijdNaMinuten: travel.reistijdNaMinuten,
+    reisOpmerking: travel.reisOpmerking,
     opmerking: input.opmerking.trim()
   });
 
@@ -182,6 +190,17 @@ function validateServiceDutyAvailability(input) {
   window.alert(message);
   setSaveStatus("Dienst niet beschikbaar op deze dag", true);
   return false;
+}
+
+function getServiceTravelInput(input) {
+  const dutyName = findDutyNameForServiceInput(input);
+  const beforeInput = toPositiveNumber(input.reistijdVoorMinuten, 0);
+  const afterInput = toPositiveNumber(input.reistijdNaMinuten, 0);
+  return {
+    reistijdVoorMinuten: beforeInput || toPositiveNumber(dutyName?.reistijdVoorMinuten, 0),
+    reistijdNaMinuten: afterInput || toPositiveNumber(dutyName?.reistijdNaMinuten, 0),
+    reisOpmerking: String(input.reisOpmerking || dutyName?.reisOpmerking || "").trim()
+  };
 }
 
 function findDutyNameForServiceInput(input) {

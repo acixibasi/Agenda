@@ -166,7 +166,7 @@ function checkMissingCoverage(context) {
     .filter((block) => block.dekkingNodig)
     .forEach((block) => {
       const overlappingServices = context.services.filter((service) => {
-        return service.datum === block.datum && timesOverlap(service.start, service.einde, block.start, block.einde);
+        return serviceBusyOverlapsBlock(service, block);
       });
       const busyParents = new Set(overlappingServices.map((service) => service.persoonId));
       const bothParentsBusy = busyParents.has("persoon_jij") && busyParents.has("persoon_vrouw");
@@ -204,13 +204,13 @@ function checkBothParentsBusy(context) {
 
     jijServices.forEach((jijService) => {
       vrouwServices.forEach((vrouwService) => {
-        if (!timesOverlap(jijService.start, jijService.einde, vrouwService.start, vrouwService.einde)) return;
+        if (!serviceBusyWindowsOverlap(jijService, vrouwService)) return;
 
         const hasCoverageConflict = context.familyBlocks.some((block) => {
           return block.dekkingNodig &&
             block.datum === date &&
-            timesOverlap(jijService.start, jijService.einde, block.start, block.einde) &&
-            timesOverlap(vrouwService.start, vrouwService.einde, block.start, block.einde);
+            serviceBusyOverlapsBlock(jijService, block) &&
+            serviceBusyOverlapsBlock(vrouwService, block);
         });
 
         if (hasCoverageConflict) return;
@@ -232,6 +232,41 @@ function checkBothParentsBusy(context) {
   });
 
   return results;
+}
+
+function serviceBusyOverlapsBlock(service, block) {
+  const serviceStart = serviceBusyDateTime(service, "start");
+  const serviceEnd = serviceBusyDateTime(service, "end");
+  const blockStart = blockDateTime(block, "start");
+  const blockEnd = blockDateTime(block, "end");
+  return dateWindowsOverlap(serviceStart, serviceEnd, blockStart, blockEnd);
+}
+
+function serviceBusyWindowsOverlap(firstService, secondService) {
+  return dateWindowsOverlap(
+    serviceBusyDateTime(firstService, "start"),
+    serviceBusyDateTime(firstService, "end"),
+    serviceBusyDateTime(secondService, "start"),
+    serviceBusyDateTime(secondService, "end")
+  );
+}
+
+function blockDateTime(block, point) {
+  const time = point === "end" ? block.einde : block.start;
+  const minutes = timeToMinutes(time);
+  if (!block.datum || minutes === null) return null;
+  const date = new Date(`${block.datum}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setMinutes(minutes);
+  if (point === "end" && timeToMinutes(block.einde) <= timeToMinutes(block.start)) {
+    date.setDate(date.getDate() + 1);
+  }
+  return date;
+}
+
+function dateWindowsOverlap(aStart, aEnd, bStart, bEnd) {
+  if (!aStart || !aEnd || !bStart || !bEnd) return false;
+  return aStart < bEnd && bStart < aEnd;
 }
 
 function checkSoftWorktimeNotifications(context) {
