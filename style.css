@@ -626,6 +626,116 @@ textarea {
   color: var(--good-text);
 }
 
+.advice-prep {
+  border-left: 5px solid var(--brand);
+  display: grid;
+  gap: 14px;
+}
+
+.advice-prep-klaar {
+  border-left-color: var(--good-text);
+}
+
+.advice-prep-aanvullen {
+  border-left-color: var(--attention-text);
+}
+
+.advice-prep-niet_klaar {
+  border-left-color: var(--conflict-text);
+}
+
+.advice-status-klaar {
+  background: var(--good);
+  color: var(--good-text);
+}
+
+.advice-status-aanvullen {
+  background: var(--attention);
+  color: var(--attention-text);
+}
+
+.advice-status-niet_klaar {
+  background: var(--conflict);
+  color: var(--conflict-text);
+}
+
+.advice-grid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.advice-metric,
+.advice-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.advice-metric {
+  display: grid;
+  gap: 4px;
+  min-height: 72px;
+}
+
+.advice-metric span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.advice-metric strong {
+  font-size: 1.45rem;
+}
+
+.advice-columns {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.advice-block {
+  display: grid;
+  gap: 8px;
+}
+
+.advice-block h4,
+.advice-context h4 {
+  margin: 0;
+}
+
+.compact-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.list-blocker {
+  color: var(--conflict-text);
+  font-weight: 700;
+}
+
+.advice-context {
+  display: grid;
+  gap: 8px;
+}
+
+.advice-context pre {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fafb;
+  color: var(--text);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  margin: 0;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
 .cockpit-filter-panel {
   box-shadow: none;
 }
@@ -1232,7 +1342,9 @@ textarea {
   }
 
   .control-score-grid,
-  .control-columns {
+  .control-columns,
+  .advice-grid,
+  .advice-columns {
     grid-template-columns: 1fr;
   }
 

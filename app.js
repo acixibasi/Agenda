@@ -424,6 +424,7 @@ function renderMonthCockpit() {
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
   const controlSummary = buildControlSummary(month, days);
+  const adviceReadiness = buildAdviceReadiness(month, days, controlSummary);
   const dayFilters = buildDayFilters(days);
   const filteredDays = filterMonthDays(days, state.cockpitFilter);
   const nextStage = getNextPlanningStage(month.planningStage);
@@ -457,6 +458,7 @@ function renderMonthCockpit() {
 
     <div class="stack">
       ${renderControlCenter(controlSummary)}
+      ${renderAdvicePreparation(adviceReadiness)}
       ${renderMonthlyHoursPanel(month)}
       ${renderMonthBoard(month, days)}
 
@@ -566,6 +568,163 @@ function renderControlCenter(summary) {
       </div>
     </section>
   `;
+}
+
+function buildAdviceReadiness(month, days, controlSummary) {
+  const services = getMonthItems(month.id, "diensten");
+  const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
+  const wishes = getMonthItems(month.id, "wensen");
+  const activeWishTemplates = getWishTemplates().filter((template) => template.actief);
+  const schoolEvents = days.flatMap((day) => day.schoolEvents);
+  const hardTemplates = activeWishTemplates.filter((template) => template.hardheid === "hard");
+  const strongTemplates = activeWishTemplates.filter((template) => template.hardheid === "sterk");
+  const softTemplates = activeWishTemplates.filter((template) => !["hard", "sterk"].includes(template.hardheid));
+  const conflictDays = days.filter((day) => dayMatchesFilter(day, "conflict"));
+  const attentionDays = days.filter((day) => dayMatchesFilter(day, "attention"));
+  const notificationDays = days.filter((day) => dayMatchesFilter(day, "notification"));
+  const missing = [
+    !services.length ? "Diensten ontbreken" : "",
+    !familyBlocks.length && !schoolEvents.length ? "School/gezin ontbreekt" : "",
+    !wishes.length && !activeWishTemplates.length ? "Wensen ontbreken" : "",
+    controlSummary.incomplete.length ? "Open onvolledige basisgegevens" : ""
+  ].filter(Boolean);
+  const blockers = [
+    controlSummary.conflicts.length ? `${controlSummary.conflicts.length} conflict(en)` : "",
+    controlSummary.openActions.length ? `${controlSummary.openActions.length} open actie(s)` : ""
+  ].filter(Boolean);
+  const status = blockers.length
+    ? "niet_klaar"
+    : missing.length
+      ? "aanvullen"
+      : "klaar";
+
+  return {
+    month,
+    status,
+    missing,
+    blockers,
+    services,
+    familyBlocks,
+    wishes,
+    schoolEvents,
+    activeWishTemplates,
+    hardTemplates,
+    strongTemplates,
+    softTemplates,
+    conflictDays,
+    attentionDays,
+    notificationDays,
+    contextText: buildAdviceContextText({
+      month,
+      services,
+      familyBlocks,
+      wishes,
+      schoolEvents,
+      hardTemplates,
+      strongTemplates,
+      softTemplates,
+      conflictDays,
+      attentionDays,
+      notificationDays,
+      controlSummary
+    })
+  };
+}
+
+function renderAdvicePreparation(scan) {
+  const statusLabel = {
+    klaar: "Klaar voor advies",
+    aanvullen: "Nog aanvullen",
+    niet_klaar: "Eerst oplossen"
+  }[scan.status];
+  return `
+    <section class="panel advice-prep advice-prep-${escapeHtml(scan.status)}">
+      <div class="control-header">
+        <div>
+          <p class="eyebrow">Adviesvoorbereiding</p>
+          <h3 class="form-section-title">${escapeHtml(statusLabel)}</h3>
+          <p class="control-meta">Samenvatting van de maand zoals een roosteradvies die later nodig heeft.</p>
+        </div>
+        <span class="status-pill advice-status-${escapeHtml(scan.status)}">${escapeHtml(statusLabel)}</span>
+      </div>
+
+      <div class="advice-grid">
+        ${renderAdviceMetric("Diensten", scan.services.length)}
+        ${renderAdviceMetric("School/gezin", scan.familyBlocks.length + scan.schoolEvents.length)}
+        ${renderAdviceMetric("Wensen", scan.wishes.length + scan.activeWishTemplates.length)}
+        ${renderAdviceMetric("Harde wensen", scan.hardTemplates.length)}
+        ${renderAdviceMetric("Conflictdagen", scan.conflictDays.length)}
+        ${renderAdviceMetric("Controledagen", scan.attentionDays.length + scan.notificationDays.length)}
+      </div>
+
+      <div class="advice-columns">
+        <div class="advice-block">
+          <h4>Ontbreekt of blokkeert</h4>
+          ${scan.blockers.length || scan.missing.length ? `
+            <ul class="compact-list">
+              ${scan.blockers.map((item) => `<li class="list-blocker">${escapeHtml(item)}</li>`).join("")}
+              ${scan.missing.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+            </ul>
+          ` : "<p class=\"muted-text\">Geen harde blokkades of ontbrekende basisinvoer.</p>"}
+        </div>
+        <div class="advice-block">
+          <h4>Voorkeuren</h4>
+          <ul class="compact-list">
+            <li>${scan.hardTemplates.length} hard</li>
+            <li>${scan.strongTemplates.length} sterk</li>
+            <li>${scan.softTemplates.length} normaal/zacht</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="advice-context">
+        <h4>Adviescontext</h4>
+        <pre>${escapeHtml(scan.contextText)}</pre>
+      </div>
+    </section>
+  `;
+}
+
+function renderAdviceMetric(label, value) {
+  return `
+    <div class="advice-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${value}</strong>
+    </div>
+  `;
+}
+
+function buildAdviceContextText(input) {
+  const lines = [
+    `Maand: ${getMonthLabel(input.month.id)} (${getStageLabel(input.month.planningStage)})`,
+    `Status controle: ${STATUS_LABELS[input.month.samenvattingStatus] || input.month.samenvattingStatus}`,
+    `Diensten: ${input.services.length}`,
+    `School/gezin: ${input.familyBlocks.length} overige gezinsafspraken, ${input.schoolEvents.length} schoolitems`,
+    `Wensen: ${input.wishes.length} dagwensen, ${input.hardTemplates.length} hard, ${input.strongTemplates.length} sterk, ${input.softTemplates.length} normaal/zacht`,
+    `Conflictdagen: ${input.conflictDays.map((day) => formatLongDate(day.date)).join(", ") || "geen"}`,
+    `Controledagen: ${[...input.attentionDays, ...input.notificationDays].map((day) => formatLongDate(day.date)).join(", ") || "geen"}`,
+    "",
+    "Actieve wenssjablonen:",
+    ...input.hardTemplates.map((template) => `- HARD: ${template.naam} (${formatWishTemplateForContext(template)})`),
+    ...input.strongTemplates.map((template) => `- STERK: ${template.naam} (${formatWishTemplateForContext(template)})`),
+    ...input.softTemplates.map((template) => `- ZACHT/NORMAAL: ${template.naam} (${formatWishTemplateForContext(template)})`),
+    "",
+    "Open controlepunten:",
+    ...[
+      ...input.controlSummary.conflicts,
+      ...input.controlSummary.checks,
+      ...input.controlSummary.notifications,
+      ...input.controlSummary.incomplete
+    ].slice(0, 12).map((result) => `- ${formatLongDate(result.datum)}: ${result.melding}`)
+  ];
+  return lines.join("\n").trim();
+}
+
+function formatWishTemplateForContext(template) {
+  const category = WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie);
+  const scope = WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope);
+  const timing = WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing);
+  return [category, scope, timing, template.beschrijving].filter(Boolean).join(" - ");
 }
 
 function renderWishTemplateContext(templates) {
