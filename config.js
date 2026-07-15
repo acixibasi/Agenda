@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.44-lokaal";
+const APP_VERSION = "0.1.45-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -73,13 +73,13 @@ const DEFAULT_DUTY_NAMES = [
   { id: "dienstnaam_dag", naam: "Dag", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "dag", start: "08:00", einde: "16:00", locatie: "", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
   { id: "dienstnaam_laat", naam: "Laat", persoonId: "persoon_jij", beschikbaarVanaf: "R1_wensen", post: "", dienstType: "laat", start: "14:00", einde: "22:00", locatie: "", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
   { id: "dienstnaam_nacht", naam: "Nacht", persoonId: "persoon_jij", beschikbaarVanaf: "R2_afstemming", post: "", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_0700_1600b_noord", naam: "0700-1600B", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "dag", start: "07:00", einde: "16:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_0800_1700a_noord", naam: "0800-1700A", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "dag", start: "08:00", einde: "17:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_1400_2300a_noord", naam: "1400-2300A", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "laat", start: "14:00", einde: "23:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_1400_2300b_noord", naam: "1400-2300B", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "laat", start: "14:00", einde: "23:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_1500_2400a_noord", naam: "1500-2400A", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "15:00", einde: "00:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "Eindtijd 24:00 opgeslagen als 00:00." },
-  { id: "dienstnaam_eva_2200_0700a_noord", naam: "2200-0700A", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
-  { id: "dienstnaam_eva_2230_0730a_noord", naam: "2230-0730A", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "22:30", einde: "07:30", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" }
+  { id: "dienstnaam_eva_0700_1600b_noord", naam: "0700-1600B Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "dag", start: "07:00", einde: "16:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
+  { id: "dienstnaam_eva_0800_1700a_noord", naam: "0800-1700A Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "dag", start: "08:00", einde: "17:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
+  { id: "dienstnaam_eva_1400_2300a_noord", naam: "1400-2300A Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "laat", start: "14:00", einde: "23:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
+  { id: "dienstnaam_eva_1400_2300b_noord", naam: "1400-2300B Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "laat", start: "14:00", einde: "23:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
+  { id: "dienstnaam_eva_1500_2400a_noord", naam: "1500-2400A Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "15:00", einde: "00:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "Eindtijd 24:00 opgeslagen als 00:00." },
+  { id: "dienstnaam_eva_2200_0700a_noord", naam: "2200-0700A Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "22:00", einde: "07:00", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" },
+  { id: "dienstnaam_eva_2230_0730a_noord", naam: "2230-0730A Noord", persoonId: "persoon_vrouw", beschikbaarVanaf: "R1_wensen", post: "Noord", dienstType: "nacht", start: "22:30", einde: "07:30", locatie: "Noord", reistijdVoorMinuten: DEFAULT_TRAVEL_MINUTES, reistijdNaMinuten: DEFAULT_TRAVEL_MINUTES, reisOpmerking: "" }
 ];
 
 const SERVICE_STATUSES = [

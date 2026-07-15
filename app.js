@@ -28,6 +28,7 @@ function createEmptyData() {
       dienstNamen: getDefaultDutyNames(),
       reistijdStandaardIngesteld: true,
       evaDienstnamenIngesteld: true,
+      evaDienstnamenNoordLabelIngesteld: true,
       gezinsSjablonen: [],
       wensSjablonen: []
     },
@@ -64,6 +65,11 @@ function normalizeData(raw) {
   if (!normalized.instellingen.evaDienstnamenIngesteld) {
     normalized.instellingen.dienstNamen = addMissingDefaultDutyNames(normalized.instellingen.dienstNamen, "persoon_vrouw");
     normalized.instellingen.evaDienstnamenIngesteld = true;
+  }
+  normalized.instellingen.evaDienstnamenNoordLabelIngesteld = Boolean(incoming.instellingen?.evaDienstnamenNoordLabelIngesteld);
+  if (!normalized.instellingen.evaDienstnamenNoordLabelIngesteld) {
+    normalized.instellingen.dienstNamen = renameDefaultDutyNames(normalized.instellingen.dienstNamen, "persoon_vrouw");
+    normalized.instellingen.evaDienstnamenNoordLabelIngesteld = true;
   }
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
@@ -153,6 +159,16 @@ function addMissingDefaultDutyNames(dutyNames, personId) {
       !existingKeys.has(getDutyNameKey(dutyName));
   });
   return [...dutyNames, ...missing];
+}
+
+function renameDefaultDutyNames(dutyNames, personId) {
+  const defaultNamesById = new Map(getDefaultDutyNames()
+    .filter((dutyName) => dutyName.persoonId === personId)
+    .map((dutyName) => [dutyName.id, dutyName.naam]));
+  return dutyNames.map((dutyName) => {
+    const defaultName = defaultNamesById.get(dutyName.id);
+    return defaultName ? { ...dutyName, naam: defaultName } : dutyName;
+  });
 }
 
 function normalizeDutyWeekdays(value) {
