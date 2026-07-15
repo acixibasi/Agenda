@@ -694,14 +694,205 @@ function renderSleutelPanel(summary) {
 }
 
 function renderSleutelServiceRow(service) {
+  const suggestions = buildServiceSwitchSuggestions(service).slice(0, 3);
   return `
     <article class="sleutel-row">
-      <div>
-        <strong>${escapeHtml(formatLongDate(service.datum))}</strong>
-        <span>${escapeHtml(formatServiceLabel(service))}</span>
+      <div class="sleutel-row-main">
+        <div>
+          <strong>${escapeHtml(formatLongDate(service.datum))}</strong>
+          <span>${escapeHtml(formatServiceLabel(service))}</span>
+        </div>
+        <span class="switch-list-title">Opties zonder beschikbaarheidsclaim</span>
+        ${renderSwitchSuggestionList(suggestions, true)}
       </div>
-      <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">Klopt, geen sleutelen nodig</button>
+      <div class="sleutel-row-actions">
+        <button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk dienst</button>
+        <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">Klopt, geen sleutelen nodig</button>
+      </div>
     </article>
+  `;
+}
+
+function buildServiceSwitchSuggestions(service) {
+  const month = getMonth(service.maandPlanningId || dateToMonthId(service.datum));
+  const activeStage = month?.planningStage || state.data.instellingen.standaardPlanningStage;
+  const currentDutyName = findDutyNameForServiceInput(service);
+  const candidates = getDutyNames()
+    .filter((dutyName) => isDutyNameAvailableFor(dutyName, service.persoonId, activeStage, service.datum))
+    .filter((dutyName) => !isSameDutySuggestion(service, dutyName, currentDutyName))
+    .map((dutyName) => scoreServiceSwitchSuggestion(service, dutyName, month))
+    .sort((a, b) => a.score - b.score || a.startMinutes - b.startMinutes || a.label.localeCompare(b.label, "nl"));
+
+  return candidates.slice(0, 6);
+}
+
+function isSameDutySuggestion(service, dutyName, currentDutyName) {
+  const serviceCode = String(service.dienstCode || "").trim().toLowerCase();
+  const dutyNameCode = String(dutyName.naam || "").trim().toLowerCase();
+  if (currentDutyName && currentDutyName.id === dutyName.id) return true;
+  return serviceCode === dutyNameCode &&
+    service.start === dutyName.start &&
+    service.einde === dutyName.einde &&
+    String(service.locatie || "").trim().toLowerCase() === String(dutyName.post || dutyName.locatie || "").trim().toLowerCase();
+}
+
+function scoreServiceSwitchSuggestion(service, dutyName, month) {
+  const simulated = buildSimulatedServiceFromDutyName(service, dutyName);
+  const details = getServiceSwitchImpact(service, simulated, dutyName, month);
+  return {
+    dutyName,
+    service: simulated,
+    score: details.score,
+    impactLabel: details.impactLabel,
+    reasons: details.reasons,
+    startMinutes: timeToMinutes(dutyName.start) ?? 9999,
+    label: dutyName.naam
+  };
+}
+
+function buildSimulatedServiceFromDutyName(service, dutyName) {
+  return {
+    ...service,
+    dienstCode: dutyName.naam,
+    dienstType: dutyName.dienstType,
+    start: dutyName.start,
+    einde: dutyName.einde,
+    locatie: dutyName.post || dutyName.locatie || service.locatie,
+    reistijdVoorMinuten: toPositiveNumber(dutyName.reistijdVoorMinuten, getServiceTravelMinutes(service, "before")),
+    reistijdNaMinuten: toPositiveNumber(dutyName.reistijdNaMinuten, getServiceTravelMinutes(service, "after")),
+    reisOpmerking: dutyName.reisOpmerking || service.reisOpmerking || ""
+  };
+}
+
+function getServiceSwitchImpact(original, simulated, dutyName, month) {
+  let score = 0;
+  const reasons = [];
+
+  if (original.dienstType === simulated.dienstType) {
+    reasons.push("zelfde soort dienst");
+  } else {
+    score += 6;
+    reasons.push(`ander type: ${formatCodeLabel(simulated.dienstType)}`);
+  }
+
+  const startShift = getTimeShiftMinutes(original.start, simulated.start);
+  if (startShift <= 30) {
+    reasons.push("bijna dezelfde starttijd");
+  } else if (startShift <= 90) {
+    score += 1;
+    reasons.push(`start ${Math.round(startShift / 60 * 10) / 10} uur anders`);
+  } else if (startShift <= 240) {
+    score += 3;
+    reasons.push(`start ${Math.round(startShift / 60 * 10) / 10} uur anders`);
+  } else {
+    score += 5;
+    reasons.push("grote tijdschuif");
+  }
+
+  const durationShift = Math.abs(getServiceDurationHours(original) - getServiceDurationHours(simulated));
+  if (durationShift > 0.5) {
+    score += durationShift > 2 ? 4 : 2;
+    reasons.push(`uren wijzigen ${formatHours(durationShift)}`);
+  }
+
+  const originalPost = String(original.locatie || "").trim().toLowerCase();
+  const candidatePost = String(dutyName.post || dutyName.locatie || "").trim().toLowerCase();
+  if (candidatePost && originalPost && candidatePost !== originalPost) {
+    score += 2;
+    reasons.push(`andere post: ${dutyName.post || dutyName.locatie}`);
+  }
+
+  const risk = getServiceSwitchRisk(simulated, month);
+  if (risk.doubleCoverageHits) {
+    score += risk.doubleCoverageHits * 8;
+    reasons.push("raakt school/gezin terwijl jullie beiden bezet zijn");
+  } else if (risk.coverageHits) {
+    score += risk.coverageHits * 2;
+    reasons.push("raakt school/gezin, check dekking");
+  }
+  if (risk.partnerOverlap) {
+    score += risk.partnerOverlap * 2;
+    reasons.push("overlap met dienst partner");
+  }
+  if (risk.wishHits) {
+    score += risk.wishHits * 3;
+    reasons.push("botst mogelijk met wens");
+  }
+  if (!risk.coverageHits && !risk.partnerOverlap && !risk.wishHits) {
+    reasons.push("geen harde botsing gevonden");
+  }
+
+  return {
+    score,
+    reasons: [...new Set(reasons)].slice(0, 4),
+    impactLabel: getSwitchImpactLabel(score)
+  };
+}
+
+function getServiceSwitchRisk(service, month) {
+  if (!month) return { coverageHits: 0, doubleCoverageHits: 0, partnerOverlap: 0, wishHits: 0 };
+  const familyBlocks = [
+    ...getMonthItems(month.id, "gezinsVerplichtingen"),
+    ...getSchoolCoverageBlocksForMonth(month)
+  ].filter((block) => block.dekkingNodig && block.datum === service.datum);
+  const partnerServices = getMonthItems(month.id, "diensten")
+    .filter((item) => item.id !== service.id && item.persoonId !== service.persoonId && item.datum === service.datum);
+  const coverageHits = familyBlocks.filter((block) => serviceBusyOverlapsBlock(service, block));
+  const doubleCoverageHits = coverageHits.filter((block) => {
+    return partnerServices.some((partnerService) => serviceBusyOverlapsBlock(partnerService, block));
+  });
+  const wishHits = getMonthItems(month.id, "wensen").filter((wish) => {
+    if (wish.datum !== service.datum) return false;
+    if (wish.type === "samen_vrij") return true;
+    return wish.persoonId === service.persoonId && ["liever_geen_dienst", "liefst_vrij"].includes(wish.type);
+  });
+  return {
+    coverageHits: coverageHits.length,
+    doubleCoverageHits: doubleCoverageHits.length,
+    partnerOverlap: partnerServices.filter((partnerService) => serviceBusyWindowsOverlap(service, partnerService)).length,
+    wishHits: wishHits.length
+  };
+}
+
+function getTimeShiftMinutes(first, second) {
+  const firstMinutes = timeToMinutes(first);
+  const secondMinutes = timeToMinutes(second);
+  if (firstMinutes === null || secondMinutes === null) return 999;
+  const raw = Math.abs(firstMinutes - secondMinutes);
+  return Math.min(raw, 1440 - raw);
+}
+
+function getSwitchImpactLabel(score) {
+  if (score <= 2) return "Minst ingrijpend";
+  if (score <= 6) return "Beperkt";
+  if (score <= 12) return "Middel";
+  return "Ingrijpend";
+}
+
+function renderSwitchSuggestionList(suggestions, compact = false) {
+  if (!suggestions.length) {
+    return `<p class="muted-text ${compact ? "switch-suggestion-empty" : ""}">Geen passende dienstopties gevonden in Beheer voor deze dag/ronde.</p>`;
+  }
+  return `
+    <div class="switch-suggestions ${compact ? "switch-suggestions-compact" : ""}">
+      ${suggestions.map(renderSwitchSuggestion).join("")}
+    </div>
+  `;
+}
+
+function renderSwitchSuggestion(suggestion) {
+  return `
+    <div class="switch-suggestion">
+      <div>
+        <strong>${escapeHtml(suggestion.dutyName.naam)}</strong>
+        <span>${escapeHtml(formatTimeRange(suggestion.dutyName.start, suggestion.dutyName.einde))}${suggestion.dutyName.post ? ` - ${escapeHtml(suggestion.dutyName.post)}` : ""}</span>
+      </div>
+      <div>
+        <span class="switch-impact">${escapeHtml(suggestion.impactLabel)}</span>
+        <span>${escapeHtml(suggestion.reasons.join(" / "))}</span>
+        <span class="switch-availability">Beschikbaarheid onbekend: check werkgeversysteem.</span>
+      </div>
+    </div>
   `;
 }
 
@@ -1253,6 +1444,7 @@ function renderDayDetail(day) {
 }
 
 function renderServiceDetail(service) {
+  const suggestions = !service.sleutelAkkoord ? buildServiceSwitchSuggestions(service).slice(0, 4) : [];
   return `
     <article class="detail-item">
       <strong>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))}</strong>
@@ -1261,6 +1453,12 @@ function renderServiceDetail(service) {
       ${getServiceTravelLabel(service) ? `<span>${escapeHtml(getServiceTravelLabel(service))}${service.reisOpmerking ? ` - ${escapeHtml(service.reisOpmerking)}` : ""}</span>` : ""}
       <span>${escapeHtml(formatCodeLabel(service.status || "status onbekend"))}</span>
       ${service.opmerking ? `<span>${escapeHtml(service.opmerking)}</span>` : ""}
+      ${suggestions.length ? `
+        <div class="service-switch-box">
+          <strong>Mogelijke opties</strong>
+          ${renderSwitchSuggestionList(suggestions)}
+        </div>
+      ` : ""}
       <div class="action-buttons">
         <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">${service.sleutelAkkoord ? "Zet terug naar checken" : "Klopt, geen sleutelen nodig"}</button>
       </div>

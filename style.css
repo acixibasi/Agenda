@@ -752,7 +752,7 @@ textarea {
 }
 
 .sleutel-row {
-  align-items: center;
+  align-items: flex-start;
   border: 1px solid var(--line);
   border-radius: 8px;
   display: flex;
@@ -761,9 +761,11 @@ textarea {
   padding: 10px;
 }
 
-.sleutel-row div {
+.sleutel-row-main {
   display: grid;
-  gap: 3px;
+  flex: 1;
+  gap: 8px;
+  min-width: 0;
 }
 
 .sleutel-row span {
@@ -771,9 +773,68 @@ textarea {
   font-size: 0.9rem;
 }
 
+.sleutel-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
 .sleutel-mark {
   font-weight: 900;
   margin-right: 4px;
+}
+
+.switch-suggestions {
+  display: grid;
+  gap: 8px;
+}
+
+.switch-list-title {
+  color: var(--text) !important;
+  font-size: 0.78rem !important;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.switch-suggestions-compact {
+  gap: 6px;
+}
+
+.switch-suggestion {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.2fr);
+  padding: 8px;
+}
+
+.switch-suggestion div {
+  display: grid;
+  gap: 2px;
+}
+
+.switch-impact {
+  color: var(--brand) !important;
+  font-weight: 900;
+}
+
+.switch-availability {
+  color: var(--conflict-text) !important;
+  font-weight: 700;
+}
+
+.switch-suggestion-empty {
+  margin: 0;
+}
+
+.service-switch-box {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 8px;
 }
 
 .cockpit-filter-panel {
@@ -1394,8 +1455,17 @@ textarea {
   .control-score-grid,
   .control-columns,
   .advice-grid,
-  .advice-columns {
+  .advice-columns,
+  .switch-suggestion {
     grid-template-columns: 1fr;
+  }
+
+  .sleutel-row {
+    flex-direction: column;
+  }
+
+  .sleutel-row-actions {
+    justify-content: flex-start;
   }
 
   .day-row {
