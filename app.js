@@ -55,7 +55,10 @@ function normalizeData(raw) {
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
-  normalized.instellingen.wensSjablonen = normalizeWishTemplates(incoming.instellingen?.wensSjablonen);
+  normalized.instellingen.wensSjablonen = normalizeWishTemplates([
+    ...normalizeWishTemplates(incoming.instellingen?.wensSjablonen),
+    ...legacyRecoveryRulesToWishTemplates(incoming.instellingen?.herstelRegels)
+  ]);
   delete normalized.instellingen.herstelRegels;
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
   normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
@@ -152,6 +155,28 @@ function normalizeWishTemplates(value) {
       actief: template.actief !== false && template.actief !== "false"
     }))
     .filter((template) => template.naam);
+}
+
+function legacyRecoveryRulesToWishTemplates(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((rule) => rule && rule.herstelTot)
+    .map((rule) => {
+      const contextLabel = rule.context === "reeks" ? "in een reeks" : "bij een losse dienst";
+      const targetLabel = rule.geldtVoorSchoolGezin === false || rule.geldtVoorSchoolGezin === "false"
+        ? "alleen werkdiensten"
+        : "diensten en school/gezin";
+      return {
+        id: `wens_${rule.id || generateId("oud_herstel")}`,
+        naam: `Herstel na ${formatCodeLabel(rule.dienstType || "dienst")} tot ${rule.herstelTot}`,
+        categorie: "herstel",
+        scope: PERSON_LABELS[rule.persoonId] ? rule.persoonId : "persoon_jij",
+        hardheid: WISH_TEMPLATE_STRENGTH[rule.hardheid] ? rule.hardheid : "sterk",
+        timing: rule.dienstType === "nacht" ? "na_nachtdienst" : "hele_maand",
+        beschrijving: `Omgezet uit oude herstelregel: ${contextLabel}, ${targetLabel}.`,
+        actief: rule.actief !== false && rule.actief !== "false"
+      };
+    });
 }
 
 function createMonth(year, month, planningStage) {
