@@ -721,8 +721,20 @@ textarea {
   gap: 8px;
 }
 
-.advice-context pre {
+.advice-context-header {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.advice-context-header h4 {
+  margin: 0;
+}
+
+.ai-context-text {
   max-height: 260px;
+  min-height: 220px;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -733,7 +745,9 @@ textarea {
   line-height: 1.45;
   margin: 0;
   padding: 12px;
+  resize: vertical;
   white-space: pre-wrap;
+  width: 100%;
 }
 
 .sleutel-panel {

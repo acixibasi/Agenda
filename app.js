@@ -902,6 +902,7 @@ function buildAdviceReadiness(month, days, controlSummary) {
   const wishes = getMonthItems(month.id, "wensen");
   const activeWishTemplates = getWishTemplates().filter((template) => template.actief);
   const schoolEvents = days.flatMap((day) => day.schoolEvents);
+  const openSwitchServices = services.filter((service) => !service.sleutelAkkoord);
   const hardTemplates = activeWishTemplates.filter((template) => template.hardheid === "hard");
   const strongTemplates = activeWishTemplates.filter((template) => template.hardheid === "sterk");
   const softTemplates = activeWishTemplates.filter((template) => !["hard", "sterk"].includes(template.hardheid));
@@ -933,6 +934,7 @@ function buildAdviceReadiness(month, days, controlSummary) {
     familyBlocks,
     wishes,
     schoolEvents,
+    openSwitchServices,
     activeWishTemplates,
     hardTemplates,
     strongTemplates,
@@ -946,6 +948,7 @@ function buildAdviceReadiness(month, days, controlSummary) {
       familyBlocks,
       wishes,
       schoolEvents,
+      openSwitchServices,
       hardTemplates,
       strongTemplates,
       softTemplates,
@@ -967,9 +970,9 @@ function renderAdvicePreparation(scan) {
     <section class="panel advice-prep advice-prep-${escapeHtml(scan.status)}">
       <div class="control-header">
         <div>
-          <p class="eyebrow">Adviesvoorbereiding</p>
+          <p class="eyebrow">AI-adviesvoorbereiding</p>
           <h3 class="form-section-title">${escapeHtml(statusLabel)}</h3>
-          <p class="control-meta">Samenvatting van de maand zoals een roosteradvies die later nodig heeft.</p>
+          <p class="control-meta">Lokale context voor later AI-advies. AI wijzigt niets en kent geen beschikbaarheid in het werkgeversysteem.</p>
         </div>
         <span class="status-pill advice-status-${escapeHtml(scan.status)}">${escapeHtml(statusLabel)}</span>
       </div>
@@ -979,6 +982,7 @@ function renderAdvicePreparation(scan) {
         ${renderAdviceMetric("School/gezin", scan.familyBlocks.length + scan.schoolEvents.length)}
         ${renderAdviceMetric("Wensen", scan.wishes.length + scan.activeWishTemplates.length)}
         ${renderAdviceMetric("Harde wensen", scan.hardTemplates.length)}
+        ${renderAdviceMetric("Open R2", scan.openSwitchServices.length)}
         ${renderAdviceMetric("Conflictdagen", scan.conflictDays.length)}
         ${renderAdviceMetric("Controledagen", scan.attentionDays.length + scan.notificationDays.length)}
       </div>
@@ -1004,8 +1008,11 @@ function renderAdvicePreparation(scan) {
       </div>
 
       <div class="advice-context">
-        <h4>Adviescontext</h4>
-        <pre>${escapeHtml(scan.contextText)}</pre>
+        <div class="advice-context-header">
+          <h4>AI-context</h4>
+          <button type="button" class="tiny-button" data-copy-ai-context>Kopieer context</button>
+        </div>
+        <textarea class="ai-context-text" readonly data-ai-context-output>${escapeHtml(scan.contextText)}</textarea>
       </div>
     </section>
   `;
@@ -1022,13 +1029,36 @@ function renderAdviceMetric(label, value) {
 
 function buildAdviceContextText(input) {
   const lines = [
+    "OPDRACHT VOOR AI:",
+    "Je bent roostercoach voor Ronald en Eva.",
+    "Geef maximaal 5 concrete opties voor Ronde 2.",
+    "Sorteer van minst ingrijpend naar meest ingrijpend.",
+    "Houd rekening met werk, gezin, school, reistijd, wensen en gezamenlijke vrije tijd.",
+    "Doe geen aannames over beschikbaarheid in het werkgeversysteem.",
+    "Noem bij elke optie wat Ronald/Eva handmatig moet checken of wijzigen.",
+    "Wijzig niets automatisch. Geef bondig advies in gewone taal.",
+    "",
+    "CONTEXT:",
     `Maand: ${getMonthLabel(input.month.id)} (${getStageLabel(input.month.planningStage)})`,
     `Status controle: ${STATUS_LABELS[input.month.samenvattingStatus] || input.month.samenvattingStatus}`,
     `Diensten: ${input.services.length}`,
     `School/gezin: ${input.familyBlocks.length} overige gezinsafspraken, ${input.schoolEvents.length} schoolitems`,
     `Wensen: ${input.wishes.length} dagwensen, ${input.hardTemplates.length} hard, ${input.strongTemplates.length} sterk, ${input.softTemplates.length} normaal/zacht`,
+    `Open Ronde 2 diensten: ${input.openSwitchServices.length}`,
     `Conflictdagen: ${input.conflictDays.map((day) => formatLongDate(day.date)).join(", ") || "geen"}`,
     `Controledagen: ${[...input.attentionDays, ...input.notificationDays].map((day) => formatLongDate(day.date)).join(", ") || "geen"}`,
+    "",
+    "Diensten:",
+    ...formatServicesForAiContext(input.services),
+    "",
+    "Open Ronde 2 diensten met mogelijke opties:",
+    ...formatOpenSwitchServicesForAiContext(input.openSwitchServices),
+    "",
+    "School en gezin:",
+    ...formatFamilyAndSchoolForAiContext(input.familyBlocks, input.schoolEvents),
+    "",
+    "Dagwensen:",
+    ...formatWishesForAiContext(input.wishes),
     "",
     "Actieve wenssjablonen:",
     ...input.hardTemplates.map((template) => `- HARD: ${template.naam} (${formatWishTemplateForContext(template)})`),
@@ -1044,6 +1074,47 @@ function buildAdviceContextText(input) {
     ].slice(0, 12).map((result) => `- ${formatLongDate(result.datum)}: ${result.melding}`)
   ];
   return lines.join("\n").trim();
+}
+
+function formatServicesForAiContext(services) {
+  if (!services.length) return ["- geen diensten ingevoerd"];
+  return [...services]
+    .sort((a, b) => `${a.datum} ${a.start}`.localeCompare(`${b.datum} ${b.start}`))
+    .map((service) => {
+      const check = service.sleutelAkkoord ? "R2 akkoord" : "R2 open";
+      return `- ${formatLongDate(service.datum)} ${getPersonLabel(service.persoonId)}: ${service.dienstCode || formatCodeLabel(service.dienstType)} ${formatTimeRange(service.start, service.einde)} ${service.locatie || ""} (${check}, ${getServiceTravelLabel(service) || "geen reistijd"})`;
+    });
+}
+
+function formatOpenSwitchServicesForAiContext(services) {
+  if (!services.length) return ["- geen open Ronde 2 diensten"];
+  return services.flatMap((service) => {
+    const suggestions = buildServiceSwitchSuggestions(service).slice(0, 5);
+    return [
+      `- OPEN ${formatLongDate(service.datum)} ${formatServiceLabel(service)}:`,
+      ...(
+        suggestions.length
+          ? suggestions.map((suggestion, index) => `  ${index + 1}. ${suggestion.dutyName.naam} ${formatTimeRange(suggestion.dutyName.start, suggestion.dutyName.einde)} ${suggestion.dutyName.post || ""} - ${suggestion.impactLabel}; ${suggestion.reasons.join("; ")}; beschikbaarheid onbekend`)
+          : ["  geen passende dienstopties gevonden in Beheer voor deze dag/ronde"]
+      )
+    ];
+  });
+}
+
+function formatFamilyAndSchoolForAiContext(familyBlocks, schoolEvents) {
+  const lines = [
+    ...familyBlocks.map((block) => `- ${formatLongDate(block.datum)} gezin: ${formatCodeLabel(block.type)} ${formatTimeRange(block.start, block.einde)} (${block.dekkingNodig ? "dekking nodig" : "geen dekking nodig"})${block.opmerking ? ` - ${block.opmerking}` : ""}`),
+    ...schoolEvents.map((event) => `- ${formatLongDate(event.date)} school: ${event.label || formatCodeLabel(event.type)} ${formatTimeRange(event.start, event.einde)}${formatSchoolCoverageLabel(event) ? ` - ${formatSchoolCoverageLabel(event)}` : ""}`)
+  ];
+  if (!lines.length) return ["- geen school/gezin ingevoerd"];
+  return lines.slice(0, 60);
+}
+
+function formatWishesForAiContext(wishes) {
+  if (!wishes.length) return ["- geen dagwensen ingevoerd"];
+  return [...wishes]
+    .sort((a, b) => `${a.datum} ${a.persoonId}`.localeCompare(`${b.datum} ${b.persoonId}`))
+    .map((wish) => `- ${formatLongDate(wish.datum)} ${getPersonLabel(wish.persoonId)}: ${formatCodeLabel(wish.type)} (${formatCodeLabel(wish.prioriteit || "normaal")})${wish.reden ? ` - ${wish.reden}` : ""}`);
 }
 
 function formatWishTemplateForContext(template) {
@@ -2032,6 +2103,11 @@ function bindEvents() {
       rerunMonthControl(runAnalysisButton.dataset.runAnalysis);
     }
 
+    if (event.target.closest("[data-copy-ai-context]")) {
+      copyAiContextToClipboard();
+      return;
+    }
+
     const advanceStageButton = event.target.closest("[data-advance-month-stage]");
     if (advanceStageButton) {
       advanceMonthStage(advanceStageButton.dataset.advanceMonthStage);
@@ -2344,6 +2420,37 @@ function toggleServiceSleutelStatus(serviceId) {
   state.selectedDate = service.datum;
   saveData(service.sleutelAkkoord ? "dienst_sleutel_akkoord" : "dienst_sleutel_heropend");
   renderApp();
+}
+
+function copyAiContextToClipboard() {
+  const output = document.querySelector("[data-ai-context-output]");
+  const text = output?.value || output?.textContent || "";
+  if (!text.trim()) {
+    setSaveStatus("Geen AI-context gevonden", true);
+    return;
+  }
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(text)
+      .then(() => setSaveStatus("AI-context gekopieerd"))
+      .catch(() => copyTextWithFallback(text));
+    return;
+  }
+
+  copyTextWithFallback(text);
+}
+
+function copyTextWithFallback(text) {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand && document.execCommand("copy");
+  textarea.remove();
+  setSaveStatus(copied ? "AI-context gekopieerd" : "Kopieer de AI-context handmatig", !copied);
 }
 
 function getPersonLabel(personId) {
