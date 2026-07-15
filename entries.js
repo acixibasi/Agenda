@@ -209,13 +209,13 @@ function autoPlaceFamilyTemplatesForActiveMonth() {
   const monthId = state.data.instellingen.actieveMaandId;
   const month = monthId ? getMonth(monthId) : null;
   if (!month) {
-    window.alert("Open eerst een maand. Daarna kunnen vaste gezinsmomenten automatisch worden geplaatst.");
+    window.alert("Open eerst een maand. Daarna kunnen overige vaste gezinsmomenten automatisch worden geplaatst.");
     return;
   }
 
   const templates = getFamilyTemplates();
   if (!templates.length) {
-    window.alert("Er zijn nog geen vaste gezinsmomenten ingesteld in Beheer.");
+    window.alert("Er zijn nog geen overige vaste gezinsmomenten ingesteld in Beheer.");
     return;
   }
 
@@ -237,14 +237,14 @@ function autoPlaceFamilyTemplatesForActiveMonth() {
   });
 
   if (!added) {
-    window.alert(`Geen nieuwe gezinsmomenten toegevoegd. ${skipped} moment(en) stonden al in ${getMonthLabel(month.id)}.`);
+    window.alert(`Geen nieuwe overige gezinsmomenten toegevoegd. ${skipped} moment(en) stonden al in ${getMonthLabel(month.id)}.`);
     return;
   }
 
   state.selectedDate = dates[0] || `${month.id}-01`;
   runAnalysis(month.id);
-  saveData("gezinsmomenten_automatisch_geplaatst");
-  window.alert(`${added} gezinsmoment(en) toegevoegd aan ${getMonthLabel(month.id)}. ${skipped} bestaande moment(en) overgeslagen.`);
+  saveData("overige_gezinsmomenten_automatisch_geplaatst");
+  window.alert(`${added} overige gezinsmoment(en) toegevoegd aan ${getMonthLabel(month.id)}. ${skipped} bestaande moment(en) overgeslagen.`);
   showView("cockpit");
 }
 

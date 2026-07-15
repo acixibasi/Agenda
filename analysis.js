@@ -85,8 +85,8 @@ function checkCompleteness(context) {
       regelId: "regel_gezin_ontbreekt",
       betrokkenDienstIds: [],
       betrokkenGezinsVerplichtingId: "",
-      melding: "Er zijn nog geen gezinsafspraken of dekkingmomenten ingevoerd",
-      advies: "Vul vaste gezinsmomenten in als die relevant zijn voor deze maand.",
+      melding: "Er zijn nog geen school- of overige dekkingsmomenten ingevoerd",
+      advies: "Vul school brengen/halen in via Schoolbeheer en overige gezinsafspraken via Gezin overig.",
       signature: `gezin_ontbreekt_${context.monthId}`
     }));
   }
@@ -115,6 +115,7 @@ function checkInvalidTimes(context) {
 
   context.familyBlocks.forEach((block) => {
     if (isValidTimeRange(block.start, block.einde)) return;
+    const label = getCoverageBlockLabel(block);
     results.push(createAnalysisResult({
       monthId: context.monthId,
       datum: block.datum,
@@ -123,7 +124,7 @@ function checkInvalidTimes(context) {
       regelId: "regel_gezinstijd_controleren",
       betrokkenDienstIds: [],
       betrokkenGezinsVerplichtingId: block.id,
-      melding: `${formatCodeLabel(block.type)} heeft een onduidelijke tijd op ${formatLongDate(block.datum)}`,
+      melding: `${label} heeft een onduidelijke tijd op ${formatLongDate(block.datum)}`,
       advies: "Controleer start- en eindtijd; dekking kan anders niet betrouwbaar worden berekend.",
       signature: `gezinstijd_${block.id}`
     }));
@@ -172,16 +173,20 @@ function checkMissingCoverage(context) {
 
       if (!bothParentsBusy) return;
 
+      const isSchoolCoverage = isSchoolCoverageBlock(block);
+      const label = getCoverageBlockLabel(block);
       results.push(createAnalysisResult({
         monthId: context.monthId,
         datum: block.datum,
         ernst: "conflict",
-        categorie: "gezin",
+        categorie: isSchoolCoverage ? "school" : "gezin",
         regelId: "regel_kinddekking",
         betrokkenDienstIds: overlappingServices.map((service) => service.id),
         betrokkenGezinsVerplichtingId: block.id,
-        melding: `${formatCodeLabel(block.type)} op ${formatLongDate(block.datum)} is ongedekt`,
-        advies: "Regel dekking of pas de dienst/gezinsafspraak aan.",
+        melding: `${label} op ${formatLongDate(block.datum)} is ongedekt`,
+        advies: isSchoolCoverage
+          ? "Regel schooldekking of pas de dienst/schoolinstelling aan."
+          : "Regel dekking of pas de dienst/overige gezinsafspraak aan.",
         signature: `kinddekking_${block.id}`
       }));
     });
@@ -219,7 +224,7 @@ function checkBothParentsBusy(context) {
           betrokkenDienstIds: [jijService.id, vrouwService.id],
           betrokkenGezinsVerplichtingId: "",
           melding: `Beide ouders werken tegelijk op ${formatLongDate(date)}`,
-          advies: "Controleer of er op dat moment geen gezinsdekking nodig is.",
+          advies: "Controleer of er op dat moment schooldekking of overige gezinsdekking nodig is.",
           signature: `beide_ouders_${jijService.id}_${vrouwService.id}`
         }));
       });
@@ -338,6 +343,17 @@ function checkWishConflicts(context) {
     });
 
   return results;
+}
+
+function isSchoolCoverageBlock(block) {
+  return Boolean(block.sourceSchoolEventId || ["school_brengen", "school_halen"].includes(block.type));
+}
+
+function getCoverageBlockLabel(block) {
+  if (block.type === "school_brengen") return "School brengen";
+  if (block.type === "school_halen") return "School halen";
+  if (isSchoolCoverageBlock(block)) return "Schoolmoment";
+  return `Overige gezinsafspraak ${formatCodeLabel(block.type || "afspraak")}`;
 }
 
 function createAnalysisResult(input) {

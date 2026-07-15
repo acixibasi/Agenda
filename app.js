@@ -176,7 +176,7 @@ function deleteMonth(monthId) {
   if (!month) return;
 
   const counts = getMonthDataCounts(monthId);
-  const ok = window.confirm(`Maand ${getMonthLabel(monthId)} verwijderen?\n\nDiensten: ${counts.services}\nGezinsitems: ${counts.familyBlocks}\nWensen: ${counts.wishes}\nActies: ${counts.actions}\n\nEr wordt eerst een lokale snapshot gemaakt.`);
+  const ok = window.confirm(`Maand ${getMonthLabel(monthId)} verwijderen?\n\nDiensten: ${counts.services}\nOverige gezinsafspraken: ${counts.familyBlocks}\nWensen: ${counts.wishes}\nActies: ${counts.actions}\n\nEr wordt eerst een lokale snapshot gemaakt.`);
   if (!ok) return;
 
   createSnapshot(`voor_maand_verwijderen_${monthId}`);
@@ -344,7 +344,7 @@ function renderMonthOverview() {
         <dl>
           <div><dt>Open acties</dt><dd>${actions.length}</dd></div>
           <div><dt>Diensten</dt><dd>${serviceCount}</dd></div>
-          <div><dt>Gezinsitems</dt><dd>${familyCount}</dd></div>
+          <div><dt>Gezin overig</dt><dd>${familyCount}</dd></div>
           <div><dt>Laatst bijgewerkt</dt><dd>${formatDateTime(month.laatstBijgewerkt)}</dd></div>
         </dl>
         <div class="month-actions">
@@ -430,7 +430,7 @@ function renderMonthCockpit() {
         <p class="eyebrow">Maandinhoud</p>
         <div class="storage-list">
           <div class="storage-row"><span>Diensten</span><strong>${services.length}</strong></div>
-          <div class="storage-row"><span>Gezinsverplichtingen</span><strong>${familyBlocks.length}</strong></div>
+        <div class="storage-row"><span>Overige gezinsafspraken</span><strong>${familyBlocks.length}</strong></div>
           <div class="storage-row"><span>Wensen</span><strong>${getMonthItems(month.id, "wensen").length}</strong></div>
           <div class="storage-row"><span>Analysepunten</span><strong>${analyses.length}</strong></div>
         </div>
@@ -647,7 +647,7 @@ function renderMonthBoardService(service) {
 function renderMonthBoardFamilyBlock(block) {
   return `
     <span class="month-board-item month-board-item-family">
-      Gezin: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}
+      Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}
     </span>
   `;
 }
@@ -762,7 +762,7 @@ function renderDayRow(day) {
         <div class="day-actions">
           <button type="button" class="tiny-button" data-open-day="${escapeHtml(day.date)}">${isSelected ? "Open" : "Bekijk"}</button>
           <button type="button" class="tiny-button" data-quick-add="service" data-date="${escapeHtml(day.date)}">Dienst</button>
-          <button type="button" class="tiny-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin</button>
+          <button type="button" class="tiny-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin overig</button>
           <button type="button" class="tiny-button" data-quick-add="wish" data-date="${escapeHtml(day.date)}">Wens</button>
         </div>
       </div>
@@ -777,7 +777,7 @@ function renderDayRow(day) {
             `).join("")}
             ${day.familyBlocks.map((block) => `
               <span class="mini-item editable-item">
-                <span>${escapeHtml(formatCodeLabel(block.type || "Gezin"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+                <span>Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
                 ${renderItemButtons("family", block.id)}
               </span>
             `).join("")}
@@ -835,7 +835,7 @@ function renderDayDetail(day) {
         </div>
         <div class="toolbar">
           <button type="button" class="subtle-button" data-quick-add="service" data-date="${escapeHtml(day.date)}">Dienst toevoegen</button>
-          <button type="button" class="subtle-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin toevoegen</button>
+          <button type="button" class="subtle-button" data-quick-add="family" data-date="${escapeHtml(day.date)}">Gezin overig toevoegen</button>
           <button type="button" class="subtle-button" data-quick-add="wish" data-date="${escapeHtml(day.date)}">Wens toevoegen</button>
         </div>
       </div>
@@ -846,8 +846,8 @@ function renderDayDetail(day) {
           ${hasServices ? day.services.map(renderServiceDetail).join("") : "<p class=\"muted-text\">Geen diensten op deze dag.</p>"}
         </div>
         <div class="day-detail-block">
-          <h4>Gezin</h4>
-          ${hasFamilyBlocks ? day.familyBlocks.map(renderFamilyDetail).join("") : "<p class=\"muted-text\">Geen gezinsafspraken op deze dag.</p>"}
+          <h4>Gezin overig</h4>
+          ${hasFamilyBlocks ? day.familyBlocks.map(renderFamilyDetail).join("") : "<p class=\"muted-text\">Geen overige gezinsafspraken op deze dag.</p>"}
         </div>
         <div class="day-detail-block">
           <h4>School</h4>
@@ -882,7 +882,7 @@ function renderServiceDetail(service) {
 function renderFamilyDetail(block) {
   return `
     <article class="detail-item">
-      <strong>${escapeHtml(formatCodeLabel(block.type || "Gezin"))}</strong>
+      <strong>Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))}</strong>
       <span>${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
       <span>${block.dekkingNodig ? "Dekking nodig" : "Geen dekking nodig"} - ${escapeHtml(formatCodeLabel(block.hardheid || "onbekend"))}</span>
       ${block.opmerking ? `<span>${escapeHtml(block.opmerking)}</span>` : ""}
@@ -1122,13 +1122,13 @@ function renderSettingsPanel() {
     </section>
 
     <section class="panel">
-      <p class="eyebrow">Vaste gezinsmomenten</p>
+      <p class="eyebrow">Overige vaste gezinsmomenten</p>
       <div class="storage-list">
         <div class="storage-row"><span>Totaal sjablonen</span><strong>${familyTemplates.length}</strong></div>
         <div class="storage-row"><span>Dekking nodig</span><strong>${familyTemplates.filter((item) => item.dekkingNodig).length}</strong></div>
       </div>
       <div class="toolbar family-template-actions">
-        <button type="button" data-auto-place-family-templates>Vaste gezinsmomenten in actieve maand zetten</button>
+        <button type="button" data-auto-place-family-templates>Overige gezinsmomenten in actieve maand zetten</button>
       </div>
       ${renderSettingsFamilyTemplateForm(editingFamilyTemplate)}
       <div class="duty-name-list settings-duty-list">
@@ -1328,12 +1328,12 @@ function renderSettingsDutyNameForm(editingDutyName = null) {
 
 function renderSettingsFamilyTemplateForm(editingTemplate = null) {
   const template = editingTemplate || {};
-  const submitLabel = editingTemplate ? "Gezinsmoment opslaan" : "Gezinsmoment toevoegen";
+  const submitLabel = editingTemplate ? "Gezinsmoment opslaan" : "Overig gezinsmoment toevoegen";
   return `
     <form id="family-template-form" class="duty-name-form settings-duty-form">
       <label>
         Naam
-        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. sport, opvang, school halen" required>
+        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. sport, opvang, afspraak">
       </label>
       <label>
         Type
@@ -1553,7 +1553,7 @@ function renderQuickEntry() {
   if (!month) {
     content.innerHTML = `
       <div class="empty-state">
-        Open eerst een maand. Daarna kun je diensten, gezinsverplichtingen en wensen toevoegen.
+        Open eerst een maand. Daarna kun je diensten, overige gezinsafspraken en wensen toevoegen.
       </div>
     `;
     return;
@@ -1571,7 +1571,7 @@ function renderQuickEntry() {
   const quickDate = state.quickEntry?.date || "";
   const quickLabel = quickDate ? formatLongDate(quickDate) : "";
   const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
-  const familySubmitLabel = state.editing?.type === "family" ? "Gezinsitem bijwerken" : "Gezinsitem opslaan";
+  const familySubmitLabel = state.editing?.type === "family" ? "Gezinsafspraak bijwerken" : "Gezinsafspraak opslaan";
   const wishSubmitLabel = state.editing?.type === "wish" ? "Wens bijwerken" : "Wens opslaan";
 
   content.innerHTML = `
@@ -1640,7 +1640,7 @@ function renderQuickEntry() {
       </section>
 
       <section class="panel ${state.quickEntry?.type === "family" ? "quick-entry-target" : ""}">
-        <h3 class="form-section-title">${state.editing?.type === "family" ? "Gezinsverplichting bewerken" : "Gezinsverplichting toevoegen"}</h3>
+        <h3 class="form-section-title">${state.editing?.type === "family" ? "Overige gezinsafspraak bewerken" : "Overige gezinsafspraak toevoegen"}</h3>
         ${renderFamilyTemplateManager(familyTemplates)}
         <form id="family-block-form" class="form-grid">
           <label>
@@ -1677,7 +1677,7 @@ function renderQuickEntry() {
           </label>
           <label class="full-width">
             Opmerking
-            <textarea name="opmerking" placeholder="Bijv. school uit, opvang dicht">${escapeHtml(editingFamilyBlock.opmerking || "")}</textarea>
+            <textarea name="opmerking" placeholder="Bijv. opvang dicht, sport, afspraak">${escapeHtml(editingFamilyBlock.opmerking || "")}</textarea>
           </label>
           <div class="form-actions full-width">
             <button type="submit">${familySubmitLabel}</button>
@@ -1742,7 +1742,7 @@ function renderStoragePanel() {
       <div class="storage-row"><span>Laatst opgeslagen</span><strong>${formatDateTime(data.lastModified)}</strong></div>
       <div class="storage-row"><span>Maanden</span><strong>${data.maandPlanningen.length}</strong></div>
       <div class="storage-row"><span>Diensten</span><strong>${data.diensten.length}</strong></div>
-      <div class="storage-row"><span>Gezinsitems</span><strong>${data.gezinsVerplichtingen.length}</strong></div>
+      <div class="storage-row"><span>Overige gezinsafspraken</span><strong>${data.gezinsVerplichtingen.length}</strong></div>
       <div class="storage-row"><span>Acties</span><strong>${data.actieItems.length}</strong></div>
       <div class="storage-row"><span>Snapshots</span><strong>${snapshots.length}</strong></div>
     </div>
@@ -2044,7 +2044,7 @@ function getCollectionNameForType(type) {
 function getItemTypeLabel(type) {
   const labels = {
     service: "Dienst",
-    family: "Gezinsverplichting",
+    family: "Overige gezinsafspraak",
     wish: "Wens"
   };
   return labels[type] || "Item";
@@ -2053,7 +2053,7 @@ function getItemTypeLabel(type) {
 function getItemTypeLogName(type) {
   const names = {
     service: "dienst",
-    family: "gezinsverplichting",
+    family: "overige gezinsafspraak",
     wish: "wens"
   };
   return names[type] || "item";
