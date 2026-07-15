@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.34-lokaal";
+const APP_VERSION = "0.1.35-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -99,6 +99,40 @@ const WISH_TYPES = [
   "samen_vrij",
   "overig"
 ];
+
+const WISH_TEMPLATE_CATEGORIES = {
+  samen_vrij: "Samen vrij",
+  minder_file: "Minder file",
+  herstel: "Herstel/rust",
+  schooldag_ontlasten: "Schooldag ontlasten",
+  weekend_beschermen: "Weekend beschermen",
+  diensttype_voorkeur: "Diensttype voorkeur",
+  niet_beschikbaar: "Niet beschikbaar",
+  overig: "Overig"
+};
+
+const WISH_TEMPLATE_SCOPE = {
+  persoon_jij: "Ronald",
+  persoon_vrouw: "Eva",
+  beiden: "Beiden",
+  gezin: "Gezin"
+};
+
+const WISH_TEMPLATE_STRENGTH = {
+  hard: "Hard",
+  sterk: "Sterk",
+  normaal: "Normaal",
+  zacht: "Zacht"
+};
+
+const WISH_TEMPLATE_TIMING = {
+  hele_maand: "Hele maand",
+  weekdag: "Weekdag",
+  weekend: "Weekend",
+  schooldag: "Schooldag",
+  na_nachtdienst: "Na nachtdienst",
+  spits: "Spits/reistijd"
+};
 
 const MONTH_NAMES = [
   "Januari",

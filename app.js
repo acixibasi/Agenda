@@ -9,7 +9,8 @@ let state = {
   pendingFocusDate: null,
   cockpitFilter: "all",
   editingDutyNameId: null,
-  editingFamilyTemplateId: null
+  editingFamilyTemplateId: null,
+  editingWishTemplateId: null
 };
 
 function createEmptyData() {
@@ -25,7 +26,8 @@ function createEmptyData() {
       standaardPlanningStage: "R1_wensen",
       contractUren: getDefaultContractHours(),
       dienstNamen: getDefaultDutyNames(),
-      gezinsSjablonen: []
+      gezinsSjablonen: [],
+      wensSjablonen: []
     },
     wijzigingsLog: []
   };
@@ -53,6 +55,7 @@ function normalizeData(raw) {
   normalized.instellingen.dienstNamen = normalizeDutyNames(incoming.instellingen?.dienstNamen);
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
+  normalized.instellingen.wensSjablonen = normalizeWishTemplates(incoming.instellingen?.wensSjablonen);
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
   normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
   normalized.kinderen = normalizeChildren(normalized.kinderen);
@@ -130,6 +133,22 @@ function normalizeFamilyTemplates(value) {
       hardheid: template.hardheid === "zacht" ? "zacht" : "hard",
       dekkingNodig: template.dekkingNodig !== false && template.dekkingNodig !== "false",
       opmerking: String(template.opmerking || "").trim()
+    }))
+    .filter((template) => template.naam);
+}
+
+function normalizeWishTemplates(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((template) => ({
+      id: template.id || generateId("wens_sjabloon"),
+      naam: String(template.naam || "").trim(),
+      categorie: WISH_TEMPLATE_CATEGORIES[template.categorie] ? template.categorie : "overig",
+      scope: WISH_TEMPLATE_SCOPE[template.scope] ? template.scope : "gezin",
+      hardheid: WISH_TEMPLATE_STRENGTH[template.hardheid] ? template.hardheid : "normaal",
+      timing: WISH_TEMPLATE_TIMING[template.timing] ? template.timing : "hele_maand",
+      beschrijving: String(template.beschrijving || template.opmerking || "").trim(),
+      actief: template.actief !== false && template.actief !== "false"
     }))
     .filter((template) => template.naam);
 }
@@ -1010,12 +1029,14 @@ function renderSettingsPanel() {
   if (!panel) return;
   const dutyNames = getDutyNames();
   const familyTemplates = getFamilyTemplates();
+  const wishTemplates = getWishTemplates();
   const contractHours = getContractHours();
   const children = getChildren();
   const schoolTimes = getSchoolTimes();
   const schoolPeriods = getSchoolPeriods();
   const editingDutyName = getEditingDutyName();
   const editingFamilyTemplate = getEditingFamilyTemplate();
+  const editingWishTemplate = getEditingWishTemplate();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -1044,6 +1065,21 @@ function renderSettingsPanel() {
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen vaste gezinsmomenten ingesteld.</div>";
+  const wishTemplateRows = wishTemplates.length
+    ? wishTemplates.map((template) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(template.naam)}</strong>
+            <span>${escapeHtml(getWishTemplateMeta(template))}</span>
+            ${template.beschrijving ? `<span>${escapeHtml(template.beschrijving)}</span>` : ""}
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-edit-wish-template="${escapeHtml(template.id)}">Wijzig</button>
+            <button type="button" class="tiny-button" data-delete-wish-template="${escapeHtml(template.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen wenssjablonen ingesteld.</div>";
   const childRows = children.length
     ? children.map((child) => `
         <div class="duty-name-row">
@@ -1133,6 +1169,19 @@ function renderSettingsPanel() {
       ${renderSettingsFamilyTemplateForm(editingFamilyTemplate)}
       <div class="duty-name-list settings-duty-list">
         ${familyTemplateRows}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Wenssjablonen</p>
+      <div class="storage-list">
+        <div class="storage-row"><span>Totaal sjablonen</span><strong>${wishTemplates.length}</strong></div>
+        <div class="storage-row"><span>Hard/sterk</span><strong>${wishTemplates.filter((item) => ["hard", "sterk"].includes(item.hardheid)).length}</strong></div>
+        <div class="storage-row"><span>Actief</span><strong>${wishTemplates.filter((item) => item.actief).length}</strong></div>
+      </div>
+      ${renderSettingsWishTemplateForm(editingWishTemplate)}
+      <div class="duty-name-list settings-duty-list">
+        ${wishTemplateRows}
       </div>
     </section>
 
@@ -1398,6 +1447,68 @@ function getFamilyTemplateMeta(template) {
     formatTimeRange(template.start, template.einde),
     template.hardheid === "zacht" ? "zacht" : "hard",
     template.dekkingNodig ? "dekking nodig" : "geen dekking"
+  ].join(" - ");
+}
+
+function renderSettingsWishTemplateForm(editingTemplate = null) {
+  const template = editingTemplate || {};
+  const submitLabel = editingTemplate ? "Wenssjabloon opslaan" : "Wenssjabloon toevoegen";
+  return `
+    <form id="wish-template-form" class="duty-name-form settings-duty-form">
+      <label>
+        Naam
+        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. samen vrij weekend" required>
+      </label>
+      <label>
+        Categorie
+        <select name="categorie" required>
+          ${renderOptions(Object.keys(WISH_TEMPLATE_CATEGORIES), WISH_TEMPLATE_CATEGORIES, template.categorie || "samen_vrij")}
+        </select>
+      </label>
+      <label>
+        Geldt voor
+        <select name="scope" required>
+          ${renderOptions(Object.keys(WISH_TEMPLATE_SCOPE), WISH_TEMPLATE_SCOPE, template.scope || "gezin")}
+        </select>
+      </label>
+      <label>
+        Hardheid
+        <select name="hardheid" required>
+          ${renderOptions(Object.keys(WISH_TEMPLATE_STRENGTH), WISH_TEMPLATE_STRENGTH, template.hardheid || "normaal")}
+        </select>
+      </label>
+      <label>
+        Wanneer
+        <select name="timing" required>
+          ${renderOptions(Object.keys(WISH_TEMPLATE_TIMING), WISH_TEMPLATE_TIMING, template.timing || "hele_maand")}
+        </select>
+      </label>
+      <label>
+        Actief
+        <select name="actief" required>
+          <option value="true"${selectedAttr(String(template.actief ?? true), "true")}>Ja</option>
+          <option value="false"${selectedAttr(String(template.actief ?? true), "false")}>Nee</option>
+        </select>
+      </label>
+      <label class="full-width">
+        Toelichting
+        <textarea name="beschrijving" placeholder="Kort en concreet, bijvoorbeeld: minimaal 1 dagdeel samen vrij">${escapeHtml(template.beschrijving || "")}</textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit">${submitLabel}</button>
+        ${editingTemplate ? "<button type=\"button\" class=\"subtle-button\" data-cancel-wish-template-edit>Annuleer</button>" : ""}
+      </div>
+    </form>
+  `;
+}
+
+function getWishTemplateMeta(template) {
+  return [
+    WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie),
+    WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope),
+    WISH_TEMPLATE_STRENGTH[template.hardheid] || formatCodeLabel(template.hardheid),
+    WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing),
+    template.actief ? "actief" : "uit"
   ].join(" - ");
 }
 
@@ -1783,6 +1894,14 @@ function getFamilyTemplates() {
   return state.data.instellingen.gezinsSjablonen;
 }
 
+function getWishTemplates() {
+  if (!Array.isArray(state.data.instellingen.wensSjablonen)) {
+    state.data.instellingen.wensSjablonen = [];
+  }
+  state.data.instellingen.wensSjablonen = normalizeWishTemplates(state.data.instellingen.wensSjablonen);
+  return state.data.instellingen.wensSjablonen;
+}
+
 function updateContractHours(input) {
   const nextContracts = {};
   Object.keys(CONTRACT_HOURS).forEach((personId) => {
@@ -1857,6 +1976,65 @@ function getFamilyTemplateKey(template) {
     template.type || "",
     String(template.start || ""),
     String(template.einde || "")
+  ].join("|");
+}
+
+function addWishTemplate(input) {
+  const template = {
+    id: state.editingWishTemplateId || generateId("wens_sjabloon"),
+    naam: String(input.naam || "").trim(),
+    categorie: WISH_TEMPLATE_CATEGORIES[input.categorie] ? input.categorie : "overig",
+    scope: WISH_TEMPLATE_SCOPE[input.scope] ? input.scope : "gezin",
+    hardheid: WISH_TEMPLATE_STRENGTH[input.hardheid] ? input.hardheid : "normaal",
+    timing: WISH_TEMPLATE_TIMING[input.timing] ? input.timing : "hele_maand",
+    beschrijving: String(input.beschrijving || "").trim(),
+    actief: input.actief !== "false"
+  };
+
+  if (!template.naam) return;
+
+  const reason = state.editingWishTemplateId ? "wenssjabloon_bijgewerkt" : "wenssjabloon_toegevoegd";
+  state.data.instellingen.wensSjablonen = [
+    ...getWishTemplates().filter((item) => {
+      if (state.editingWishTemplateId) return item.id !== state.editingWishTemplateId;
+      return getWishTemplateKey(item) !== getWishTemplateKey(template);
+    }),
+    template
+  ];
+  state.editingWishTemplateId = null;
+  saveData(reason);
+  renderSettingsPanel();
+}
+
+function deleteWishTemplate(id) {
+  state.data.instellingen.wensSjablonen = getWishTemplates().filter((template) => template.id !== id);
+  if (state.editingWishTemplateId === id) state.editingWishTemplateId = null;
+  saveData("wenssjabloon_verwijderd");
+  renderSettingsPanel();
+}
+
+function startEditWishTemplate(id) {
+  if (!getWishTemplates().some((template) => template.id === id)) return;
+  state.editingWishTemplateId = id;
+  renderSettingsPanel();
+}
+
+function cancelEditWishTemplate() {
+  state.editingWishTemplateId = null;
+  renderSettingsPanel();
+}
+
+function getEditingWishTemplate() {
+  if (!state.editingWishTemplateId) return null;
+  return getWishTemplates().find((template) => template.id === state.editingWishTemplateId) || null;
+}
+
+function getWishTemplateKey(template) {
+  return [
+    String(template.naam || "").trim().toLowerCase(),
+    template.categorie || "",
+    template.scope || "",
+    template.timing || ""
   ].join("|");
 }
 
@@ -2172,6 +2350,18 @@ function bindEvents() {
       return;
     }
 
+    const editWishTemplateButton = event.target.closest("[data-edit-wish-template]");
+    if (editWishTemplateButton) {
+      startEditWishTemplate(editWishTemplateButton.dataset.editWishTemplate);
+      return;
+    }
+
+    const deleteWishTemplateButton = event.target.closest("[data-delete-wish-template]");
+    if (deleteWishTemplateButton) {
+      deleteWishTemplate(deleteWishTemplateButton.dataset.deleteWishTemplate);
+      return;
+    }
+
     const deleteChildButton = event.target.closest("[data-delete-child]");
     if (deleteChildButton) {
       deleteChild(deleteChildButton.dataset.deleteChild);
@@ -2197,6 +2387,11 @@ function bindEvents() {
 
     if (event.target.closest("[data-cancel-family-template-edit]")) {
       cancelEditFamilyTemplate();
+      return;
+    }
+
+    if (event.target.closest("[data-cancel-wish-template-edit]")) {
+      cancelEditWishTemplate();
       return;
     }
 
@@ -2274,6 +2469,13 @@ function bindEvents() {
     if (event.target.id === "family-template-form") {
       event.preventDefault();
       addFamilyTemplate(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "wish-template-form") {
+      event.preventDefault();
+      addWishTemplate(formToObject(event.target));
       event.target.reset();
       return;
     }
