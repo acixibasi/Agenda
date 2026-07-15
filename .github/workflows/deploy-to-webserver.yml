@@ -1,9 +1,6 @@
 name: Deploy to webserver
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -48,6 +45,12 @@ jobs:
           cd ${SFTP_REMOTE_DIR}
           put index.html
           put style.css
+          put config.js
+          put school.js
+          put storage.js
+          put settings.js
+          put entries.js
+          put analysis.js
           put app.js
           put -r docs
           bye
