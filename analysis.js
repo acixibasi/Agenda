@@ -12,7 +12,6 @@ function runAnalysis(monthId) {
     ...checkMissingCoverage(context),
     ...checkBothParentsBusy(context),
     ...checkSoftWorktimeNotifications(context),
-    ...checkRecoveryRules(context),
     ...checkMonthlyContractHours(context),
     ...checkWishConflicts(context)
   ].map((result) => restoreNotificationStatus(result, preservedNotificationStatuses));
@@ -48,7 +47,6 @@ function buildAnalysisContext(monthId) {
       ...getSchoolCoverageBlocksForMonth(getMonth(monthId))
     ],
     wishes: getMonthItems(monthId, "wensen"),
-    recoveryRules: getRecoveryRules().filter((rule) => rule.actief),
     analyses: getMonthItems(monthId, "analyseResultaten"),
     actions: getMonthItems(monthId, "actieItems")
   };
@@ -285,127 +283,6 @@ function checkSoftWorktimeNotifications(context) {
   });
 
   return results;
-}
-
-function checkRecoveryRules(context) {
-  const results = [];
-  if (!context.recoveryRules.length) return results;
-
-  context.recoveryRules.forEach((rule) => {
-    const matchingServices = context.services.filter((service) => {
-      return service.persoonId === rule.persoonId && service.dienstType === rule.dienstType;
-    });
-
-    matchingServices.forEach((service) => {
-      const contextType = getRecoveryServiceContext(service, matchingServices);
-      if (contextType !== rule.context) return;
-
-      const recovery = getRecoveryWindow(service, rule);
-      if (!recovery) return;
-
-      context.services
-        .filter((candidate) => candidate.persoonId === rule.persoonId && candidate.id !== service.id)
-        .filter((candidate) => periodOverlaps(recovery.start, recovery.end, serviceDateTime(candidate, "start"), serviceDateTime(candidate, "end")))
-        .forEach((candidate) => {
-          results.push(createRecoveryAnalysisResult({
-            context,
-            rule,
-            service,
-            date: candidate.datum,
-            affectedServiceIds: [service.id, candidate.id],
-            message: `${getPersonLabel(rule.persoonId)} heeft herstel na ${formatCodeLabel(rule.dienstType)} tot ${rule.herstelTot}, maar heeft een dienst op ${formatLongDate(candidate.datum)}`,
-            advice: "Controleer of deze dienst past bij de herstelregel of pas de planning aan.",
-            signatureSuffix: `dienst_${service.id}_${candidate.id}`
-          }));
-        });
-
-      if (!rule.geldtVoorSchoolGezin) return;
-
-      context.familyBlocks
-        .filter((block) => periodOverlaps(recovery.start, recovery.end, blockDateTime(block, "start"), blockDateTime(block, "end")))
-        .forEach((block) => {
-          const label = getCoverageBlockLabel(block);
-          results.push(createRecoveryAnalysisResult({
-            context,
-            rule,
-            service,
-            date: block.datum,
-            affectedServiceIds: [service.id],
-            affectedFamilyBlockId: block.id,
-            message: `${getPersonLabel(rule.persoonId)} heeft herstel na ${formatCodeLabel(rule.dienstType)} tot ${rule.herstelTot}, maar ${label.toLowerCase()} valt in dat venster`,
-            advice: isSchoolCoverageBlock(block)
-              ? "Regel schooldekking door iemand anders of pas dienst/schoolinstelling aan."
-              : "Regel gezinsdekking door iemand anders of pas de planning aan.",
-            signatureSuffix: `dekking_${service.id}_${block.id}`
-          }));
-        });
-    });
-  });
-
-  return results;
-}
-
-function createRecoveryAnalysisResult({ context, rule, service, date, affectedServiceIds, affectedFamilyBlockId = "", message, advice, signatureSuffix }) {
-  return createAnalysisResult({
-    monthId: context.monthId,
-    datum: date,
-    ernst: getRecoverySeverity(rule),
-    categorie: "herstel",
-    regelId: "regel_herstel_na_dienst",
-    betrokkenDienstIds: affectedServiceIds,
-    betrokkenGezinsVerplichtingId: affectedFamilyBlockId,
-    melding: message,
-    advies: advice,
-    signature: `herstel_${rule.id}_${signatureSuffix}`
-  });
-}
-
-function getRecoverySeverity(rule) {
-  if (rule.hardheid === "hard") return "conflict";
-  if (rule.hardheid === "sterk") return "waarschuwing";
-  return "notificatie";
-}
-
-function getRecoveryServiceContext(service, services) {
-  const serviceStart = serviceDateTime(service, "start");
-  if (!serviceStart) return "losse_dienst";
-  const hasAdjacent = services.some((candidate) => {
-    if (candidate.id === service.id) return false;
-    const candidateStart = serviceDateTime(candidate, "start");
-    if (!candidateStart) return false;
-    const hours = Math.abs(candidateStart - serviceStart) / 36e5;
-    return hours > 0 && hours <= 30;
-  });
-  return hasAdjacent ? "reeks" : "losse_dienst";
-}
-
-function getRecoveryWindow(service, rule) {
-  const start = serviceDateTime(service, "end");
-  if (!start || !rule.herstelTot) return null;
-  const end = new Date(start);
-  const minutes = timeToMinutes(rule.herstelTot);
-  if (minutes === null) return null;
-  end.setHours(0, minutes, 0, 0);
-  if (end <= start) end.setDate(end.getDate() + 1);
-  return { start, end };
-}
-
-function blockDateTime(block, point) {
-  const time = point === "end" ? block.einde : block.start;
-  const minutes = timeToMinutes(time);
-  if (!block.datum || minutes === null) return null;
-  const date = new Date(`${block.datum}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setMinutes(minutes);
-  if (point === "end" && timeToMinutes(block.einde) <= timeToMinutes(block.start)) {
-    date.setDate(date.getDate() + 1);
-  }
-  return date;
-}
-
-function periodOverlaps(aStart, aEnd, bStart, bEnd) {
-  if (!aStart || !aEnd || !bStart || !bEnd) return false;
-  return aStart < bEnd && bStart < aEnd;
 }
 
 function checkMonthlyContractHours(context) {

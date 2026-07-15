@@ -10,8 +10,7 @@ let state = {
   cockpitFilter: "all",
   editingDutyNameId: null,
   editingFamilyTemplateId: null,
-  editingWishTemplateId: null,
-  editingRecoveryRuleId: null
+  editingWishTemplateId: null
 };
 
 function createEmptyData() {
@@ -28,8 +27,7 @@ function createEmptyData() {
       contractUren: getDefaultContractHours(),
       dienstNamen: getDefaultDutyNames(),
       gezinsSjablonen: [],
-      wensSjablonen: [],
-      herstelRegels: []
+      wensSjablonen: []
     },
     wijzigingsLog: []
   };
@@ -58,7 +56,7 @@ function normalizeData(raw) {
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
   normalized.instellingen.wensSjablonen = normalizeWishTemplates(incoming.instellingen?.wensSjablonen);
-  normalized.instellingen.herstelRegels = normalizeRecoveryRules(incoming.instellingen?.herstelRegels);
+  delete normalized.instellingen.herstelRegels;
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
   normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
   normalized.kinderen = normalizeChildren(normalized.kinderen);
@@ -154,22 +152,6 @@ function normalizeWishTemplates(value) {
       actief: template.actief !== false && template.actief !== "false"
     }))
     .filter((template) => template.naam);
-}
-
-function normalizeRecoveryRules(value) {
-  const source = Array.isArray(value) ? value : [];
-  return source
-    .map((rule) => ({
-      id: rule.id || generateId("herstelregel"),
-      persoonId: PERSON_LABELS[rule.persoonId] ? rule.persoonId : "persoon_jij",
-      dienstType: SERVICE_TYPES.includes(rule.dienstType) ? rule.dienstType : "nacht",
-      context: RECOVERY_RULE_CONTEXT[rule.context] ? rule.context : "losse_dienst",
-      herstelTot: rule.herstelTot || "",
-      hardheid: RECOVERY_RULE_STRENGTH[rule.hardheid] ? rule.hardheid : "sterk",
-      geldtVoorSchoolGezin: rule.geldtVoorSchoolGezin !== false && rule.geldtVoorSchoolGezin !== "false",
-      actief: rule.actief !== false && rule.actief !== "false"
-    }))
-    .filter((rule) => rule.herstelTot);
 }
 
 function createMonth(year, month, planningStage) {
@@ -1592,18 +1574,6 @@ function bindEvents() {
       return;
     }
 
-    const editRecoveryRuleButton = event.target.closest("[data-edit-recovery-rule]");
-    if (editRecoveryRuleButton) {
-      startEditRecoveryRule(editRecoveryRuleButton.dataset.editRecoveryRule);
-      return;
-    }
-
-    const deleteRecoveryRuleButton = event.target.closest("[data-delete-recovery-rule]");
-    if (deleteRecoveryRuleButton) {
-      deleteRecoveryRule(deleteRecoveryRuleButton.dataset.deleteRecoveryRule);
-      return;
-    }
-
     const deleteChildButton = event.target.closest("[data-delete-child]");
     if (deleteChildButton) {
       deleteChild(deleteChildButton.dataset.deleteChild);
@@ -1634,11 +1604,6 @@ function bindEvents() {
 
     if (event.target.closest("[data-cancel-wish-template-edit]")) {
       cancelEditWishTemplate();
-      return;
-    }
-
-    if (event.target.closest("[data-cancel-recovery-rule-edit]")) {
-      cancelEditRecoveryRule();
       return;
     }
 
@@ -1723,13 +1688,6 @@ function bindEvents() {
     if (event.target.id === "wish-template-form") {
       event.preventDefault();
       addWishTemplate(formToObject(event.target));
-      event.target.reset();
-      return;
-    }
-
-    if (event.target.id === "recovery-rule-form") {
-      event.preventDefault();
-      addRecoveryRule(formToObject(event.target));
       event.target.reset();
       return;
     }

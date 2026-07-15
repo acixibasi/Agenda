@@ -6,7 +6,6 @@ function renderSettingsPanel() {
   const dutyNames = getDutyNames();
   const familyTemplates = getFamilyTemplates();
   const wishTemplates = getWishTemplates();
-  const recoveryRules = getRecoveryRules();
   const contractHours = getContractHours();
   const children = getChildren();
   const schoolTimes = getSchoolTimes();
@@ -14,7 +13,6 @@ function renderSettingsPanel() {
   const editingDutyName = getEditingDutyName();
   const editingFamilyTemplate = getEditingFamilyTemplate();
   const editingWishTemplate = getEditingWishTemplate();
-  const editingRecoveryRule = getEditingRecoveryRule();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -58,20 +56,6 @@ function renderSettingsPanel() {
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen wenssjablonen ingesteld.</div>";
-  const recoveryRuleRows = recoveryRules.length
-    ? recoveryRules.map((rule) => `
-        <div class="duty-name-row">
-          <div>
-            <strong>${escapeHtml(getRecoveryRuleTitle(rule))}</strong>
-            <span>${escapeHtml(getRecoveryRuleMeta(rule))}</span>
-          </div>
-          <div class="item-actions">
-            <button type="button" class="tiny-button" data-edit-recovery-rule="${escapeHtml(rule.id)}">Wijzig</button>
-            <button type="button" class="tiny-button" data-delete-recovery-rule="${escapeHtml(rule.id)}">Verwijder</button>
-          </div>
-        </div>
-      `).join("")
-    : "<div class=\"empty-state\">Geen herstelregels ingesteld.</div>";
   const childRows = children.length
     ? children.map((child) => `
         <div class="duty-name-row">
@@ -174,19 +158,6 @@ function renderSettingsPanel() {
       ${renderSettingsWishTemplateForm(editingWishTemplate)}
       <div class="duty-name-list settings-duty-list">
         ${wishTemplateRows}
-      </div>
-    </section>
-
-    <section class="panel">
-      <p class="eyebrow">Herstelregels</p>
-      <div class="storage-list">
-        <div class="storage-row"><span>Totaal regels</span><strong>${recoveryRules.length}</strong></div>
-        <div class="storage-row"><span>Actief</span><strong>${recoveryRules.filter((item) => item.actief).length}</strong></div>
-        <div class="storage-row"><span>Hard/sterk</span><strong>${recoveryRules.filter((item) => ["hard", "sterk"].includes(item.hardheid)).length}</strong></div>
-      </div>
-      ${renderSettingsRecoveryRuleForm(editingRecoveryRule)}
-      <div class="duty-name-list settings-duty-list">
-        ${recoveryRuleRows}
       </div>
     </section>
 
@@ -313,7 +284,7 @@ function renderSettingsPanel() {
       <div class="settings-grid">
         <div class="settings-tile"><strong>config.js</strong><span>Versie, personen, rondes, normen, standaardlijsten</span></div>
         <div class="settings-tile"><strong>app.js</strong><span>App-start, hoofdweergaven en events</span></div>
-        <div class="settings-tile"><strong>settings.js</strong><span>Beheer, dienstkeuzes, voorkeuren en herstelregels</span></div>
+        <div class="settings-tile"><strong>settings.js</strong><span>Beheer, dienstkeuzes, voorkeuren en schoolinstellingen</span></div>
         <div class="settings-tile"><strong>storage.js</strong><span>Autosave, backup, herstel en snapshots</span></div>
         <div class="settings-tile"><strong>entries.js</strong><span>Maanddagen, diensten, gezinsitems, wensen en snelle invoer</span></div>
         <div class="settings-tile"><strong>analysis.js</strong><span>Controle, notificaties en actie-sync</span></div>
@@ -518,75 +489,6 @@ function getWishTemplateMeta(template) {
   ].join(" - ");
 }
 
-function renderSettingsRecoveryRuleForm(editingRule = null) {
-  const rule = editingRule || {};
-  const submitLabel = editingRule ? "Herstelregel opslaan" : "Herstelregel toevoegen";
-  return `
-    <form id="recovery-rule-form" class="duty-name-form settings-duty-form">
-      <label>
-        Persoon
-        <select name="persoonId" required>
-          ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS, rule.persoonId || "persoon_jij")}
-        </select>
-      </label>
-      <label>
-        Diensttype
-        <select name="dienstType" required>
-          ${renderOptions(SERVICE_TYPES, null, rule.dienstType || "nacht")}
-        </select>
-      </label>
-      <label>
-        Situatie
-        <select name="context" required>
-          ${renderOptions(Object.keys(RECOVERY_RULE_CONTEXT), RECOVERY_RULE_CONTEXT, rule.context || "losse_dienst")}
-        </select>
-      </label>
-      <label>
-        Herstel tot
-        <input name="herstelTot" type="time" value="${escapeHtml(rule.herstelTot || "")}" required>
-      </label>
-      <label>
-        Hardheid
-        <select name="hardheid" required>
-          ${renderOptions(Object.keys(RECOVERY_RULE_STRENGTH), RECOVERY_RULE_STRENGTH, rule.hardheid || "sterk")}
-        </select>
-      </label>
-      <label>
-        School/gezin blokkeren
-        <select name="geldtVoorSchoolGezin" required>
-          <option value="true"${selectedAttr(String(rule.geldtVoorSchoolGezin ?? true), "true")}>Ja</option>
-          <option value="false"${selectedAttr(String(rule.geldtVoorSchoolGezin ?? true), "false")}>Nee</option>
-        </select>
-      </label>
-      <label>
-        Actief
-        <select name="actief" required>
-          <option value="true"${selectedAttr(String(rule.actief ?? true), "true")}>Ja</option>
-          <option value="false"${selectedAttr(String(rule.actief ?? true), "false")}>Nee</option>
-        </select>
-      </label>
-      <div class="form-actions">
-        <button type="submit">${submitLabel}</button>
-        ${editingRule ? "<button type=\"button\" class=\"subtle-button\" data-cancel-recovery-rule-edit>Annuleer</button>" : ""}
-      </div>
-    </form>
-  `;
-}
-
-function getRecoveryRuleTitle(rule) {
-  return `${getPersonLabel(rule.persoonId)} na ${formatCodeLabel(rule.dienstType)}`;
-}
-
-function getRecoveryRuleMeta(rule) {
-  return [
-    RECOVERY_RULE_CONTEXT[rule.context] || formatCodeLabel(rule.context),
-    `tot ${rule.herstelTot}`,
-    RECOVERY_RULE_STRENGTH[rule.hardheid] || formatCodeLabel(rule.hardheid),
-    rule.geldtVoorSchoolGezin ? "blokkeert school/gezin" : "alleen diensten",
-    rule.actief ? "actief" : "uit"
-  ].join(" - ");
-}
-
 function getDutyNameMeta(dutyName) {
   const person = DUTY_PERSON_OPTIONS[dutyName.persoonId] || getPersonLabel(dutyName.persoonId);
   const stage = getPlanningStageLabels()[dutyName.beschikbaarVanaf] || formatCodeLabel(dutyName.beschikbaarVanaf);
@@ -676,14 +578,6 @@ function getWishTemplates() {
   }
   state.data.instellingen.wensSjablonen = normalizeWishTemplates(state.data.instellingen.wensSjablonen);
   return state.data.instellingen.wensSjablonen;
-}
-
-function getRecoveryRules() {
-  if (!Array.isArray(state.data.instellingen.herstelRegels)) {
-    state.data.instellingen.herstelRegels = [];
-  }
-  state.data.instellingen.herstelRegels = normalizeRecoveryRules(state.data.instellingen.herstelRegels);
-  return state.data.instellingen.herstelRegels;
 }
 
 function updateContractHours(input) {
@@ -819,67 +713,6 @@ function getWishTemplateKey(template) {
     template.categorie || "",
     template.scope || "",
     template.timing || ""
-  ].join("|");
-}
-
-function addRecoveryRule(input) {
-  const rule = {
-    id: state.editingRecoveryRuleId || generateId("herstelregel"),
-    persoonId: PERSON_LABELS[input.persoonId] ? input.persoonId : "persoon_jij",
-    dienstType: SERVICE_TYPES.includes(input.dienstType) ? input.dienstType : "nacht",
-    context: RECOVERY_RULE_CONTEXT[input.context] ? input.context : "losse_dienst",
-    herstelTot: input.herstelTot || "",
-    hardheid: RECOVERY_RULE_STRENGTH[input.hardheid] ? input.hardheid : "sterk",
-    geldtVoorSchoolGezin: input.geldtVoorSchoolGezin !== "false",
-    actief: input.actief !== "false"
-  };
-
-  if (!rule.herstelTot) return;
-
-  const reason = state.editingRecoveryRuleId ? "herstelregel_bijgewerkt" : "herstelregel_toegevoegd";
-  state.data.instellingen.herstelRegels = [
-    ...getRecoveryRules().filter((item) => {
-      if (state.editingRecoveryRuleId) return item.id !== state.editingRecoveryRuleId;
-      return getRecoveryRuleKey(item) !== getRecoveryRuleKey(rule);
-    }),
-    rule
-  ];
-  state.editingRecoveryRuleId = null;
-  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
-  saveData(reason);
-  renderSettingsPanel();
-}
-
-function deleteRecoveryRule(id) {
-  state.data.instellingen.herstelRegels = getRecoveryRules().filter((rule) => rule.id !== id);
-  if (state.editingRecoveryRuleId === id) state.editingRecoveryRuleId = null;
-  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
-  saveData("herstelregel_verwijderd");
-  renderSettingsPanel();
-}
-
-function startEditRecoveryRule(id) {
-  if (!getRecoveryRules().some((rule) => rule.id === id)) return;
-  state.editingRecoveryRuleId = id;
-  renderSettingsPanel();
-}
-
-function cancelEditRecoveryRule() {
-  state.editingRecoveryRuleId = null;
-  renderSettingsPanel();
-}
-
-function getEditingRecoveryRule() {
-  if (!state.editingRecoveryRuleId) return null;
-  return getRecoveryRules().find((rule) => rule.id === state.editingRecoveryRuleId) || null;
-}
-
-function getRecoveryRuleKey(rule) {
-  return [
-    rule.persoonId || "",
-    rule.dienstType || "",
-    rule.context || "",
-    rule.herstelTot || ""
   ].join("|");
 }
 
