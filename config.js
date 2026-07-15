@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.36-lokaal";
+const APP_VERSION = "0.1.37-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -132,6 +132,18 @@ const WISH_TEMPLATE_TIMING = {
   schooldag: "Schooldag",
   na_nachtdienst: "Na nachtdienst",
   spits: "Spits/reistijd"
+};
+
+const RECOVERY_RULE_CONTEXT = {
+  losse_dienst: "Losse dienst",
+  reeks: "Reeks"
+};
+
+const RECOVERY_RULE_STRENGTH = {
+  hard: "Hard",
+  sterk: "Sterk",
+  normaal: "Normaal",
+  zacht: "Zacht"
 };
 
 const MONTH_NAMES = [

@@ -10,7 +10,8 @@ let state = {
   cockpitFilter: "all",
   editingDutyNameId: null,
   editingFamilyTemplateId: null,
-  editingWishTemplateId: null
+  editingWishTemplateId: null,
+  editingRecoveryRuleId: null
 };
 
 function createEmptyData() {
@@ -27,7 +28,8 @@ function createEmptyData() {
       contractUren: getDefaultContractHours(),
       dienstNamen: getDefaultDutyNames(),
       gezinsSjablonen: [],
-      wensSjablonen: []
+      wensSjablonen: [],
+      herstelRegels: []
     },
     wijzigingsLog: []
   };
@@ -56,6 +58,7 @@ function normalizeData(raw) {
   normalized.instellingen.contractUren = normalizeContractHours(incoming.instellingen?.contractUren);
   normalized.instellingen.gezinsSjablonen = normalizeFamilyTemplates(incoming.instellingen?.gezinsSjablonen);
   normalized.instellingen.wensSjablonen = normalizeWishTemplates(incoming.instellingen?.wensSjablonen);
+  normalized.instellingen.herstelRegels = normalizeRecoveryRules(incoming.instellingen?.herstelRegels);
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
   normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
   normalized.kinderen = normalizeChildren(normalized.kinderen);
@@ -151,6 +154,22 @@ function normalizeWishTemplates(value) {
       actief: template.actief !== false && template.actief !== "false"
     }))
     .filter((template) => template.naam);
+}
+
+function normalizeRecoveryRules(value) {
+  const source = Array.isArray(value) ? value : [];
+  return source
+    .map((rule) => ({
+      id: rule.id || generateId("herstelregel"),
+      persoonId: PERSON_LABELS[rule.persoonId] ? rule.persoonId : "persoon_jij",
+      dienstType: SERVICE_TYPES.includes(rule.dienstType) ? rule.dienstType : "nacht",
+      context: RECOVERY_RULE_CONTEXT[rule.context] ? rule.context : "losse_dienst",
+      herstelTot: rule.herstelTot || "",
+      hardheid: RECOVERY_RULE_STRENGTH[rule.hardheid] ? rule.hardheid : "sterk",
+      geldtVoorSchoolGezin: rule.geldtVoorSchoolGezin !== false && rule.geldtVoorSchoolGezin !== "false",
+      actief: rule.actief !== false && rule.actief !== "false"
+    }))
+    .filter((rule) => rule.herstelTot);
 }
 
 function createMonth(year, month, planningStage) {
@@ -1067,6 +1086,7 @@ function renderSettingsPanel() {
   const dutyNames = getDutyNames();
   const familyTemplates = getFamilyTemplates();
   const wishTemplates = getWishTemplates();
+  const recoveryRules = getRecoveryRules();
   const contractHours = getContractHours();
   const children = getChildren();
   const schoolTimes = getSchoolTimes();
@@ -1074,6 +1094,7 @@ function renderSettingsPanel() {
   const editingDutyName = getEditingDutyName();
   const editingFamilyTemplate = getEditingFamilyTemplate();
   const editingWishTemplate = getEditingWishTemplate();
+  const editingRecoveryRule = getEditingRecoveryRule();
   const dutyRows = dutyNames.length
     ? dutyNames.map((dutyName) => `
         <div class="duty-name-row">
@@ -1117,6 +1138,20 @@ function renderSettingsPanel() {
         </div>
       `).join("")
     : "<div class=\"empty-state\">Geen wenssjablonen ingesteld.</div>";
+  const recoveryRuleRows = recoveryRules.length
+    ? recoveryRules.map((rule) => `
+        <div class="duty-name-row">
+          <div>
+            <strong>${escapeHtml(getRecoveryRuleTitle(rule))}</strong>
+            <span>${escapeHtml(getRecoveryRuleMeta(rule))}</span>
+          </div>
+          <div class="item-actions">
+            <button type="button" class="tiny-button" data-edit-recovery-rule="${escapeHtml(rule.id)}">Wijzig</button>
+            <button type="button" class="tiny-button" data-delete-recovery-rule="${escapeHtml(rule.id)}">Verwijder</button>
+          </div>
+        </div>
+      `).join("")
+    : "<div class=\"empty-state\">Geen herstelregels ingesteld.</div>";
   const childRows = children.length
     ? children.map((child) => `
         <div class="duty-name-row">
@@ -1219,6 +1254,19 @@ function renderSettingsPanel() {
       ${renderSettingsWishTemplateForm(editingWishTemplate)}
       <div class="duty-name-list settings-duty-list">
         ${wishTemplateRows}
+      </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Herstelregels</p>
+      <div class="storage-list">
+        <div class="storage-row"><span>Totaal regels</span><strong>${recoveryRules.length}</strong></div>
+        <div class="storage-row"><span>Actief</span><strong>${recoveryRules.filter((item) => item.actief).length}</strong></div>
+        <div class="storage-row"><span>Hard/sterk</span><strong>${recoveryRules.filter((item) => ["hard", "sterk"].includes(item.hardheid)).length}</strong></div>
+      </div>
+      ${renderSettingsRecoveryRuleForm(editingRecoveryRule)}
+      <div class="duty-name-list settings-duty-list">
+        ${recoveryRuleRows}
       </div>
     </section>
 
@@ -1546,6 +1594,75 @@ function getWishTemplateMeta(template) {
     WISH_TEMPLATE_STRENGTH[template.hardheid] || formatCodeLabel(template.hardheid),
     WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing),
     template.actief ? "actief" : "uit"
+  ].join(" - ");
+}
+
+function renderSettingsRecoveryRuleForm(editingRule = null) {
+  const rule = editingRule || {};
+  const submitLabel = editingRule ? "Herstelregel opslaan" : "Herstelregel toevoegen";
+  return `
+    <form id="recovery-rule-form" class="duty-name-form settings-duty-form">
+      <label>
+        Persoon
+        <select name="persoonId" required>
+          ${renderOptions(Object.keys(PERSON_LABELS), PERSON_LABELS, rule.persoonId || "persoon_jij")}
+        </select>
+      </label>
+      <label>
+        Diensttype
+        <select name="dienstType" required>
+          ${renderOptions(SERVICE_TYPES, null, rule.dienstType || "nacht")}
+        </select>
+      </label>
+      <label>
+        Situatie
+        <select name="context" required>
+          ${renderOptions(Object.keys(RECOVERY_RULE_CONTEXT), RECOVERY_RULE_CONTEXT, rule.context || "losse_dienst")}
+        </select>
+      </label>
+      <label>
+        Herstel tot
+        <input name="herstelTot" type="time" value="${escapeHtml(rule.herstelTot || "")}" required>
+      </label>
+      <label>
+        Hardheid
+        <select name="hardheid" required>
+          ${renderOptions(Object.keys(RECOVERY_RULE_STRENGTH), RECOVERY_RULE_STRENGTH, rule.hardheid || "sterk")}
+        </select>
+      </label>
+      <label>
+        School/gezin blokkeren
+        <select name="geldtVoorSchoolGezin" required>
+          <option value="true"${selectedAttr(String(rule.geldtVoorSchoolGezin ?? true), "true")}>Ja</option>
+          <option value="false"${selectedAttr(String(rule.geldtVoorSchoolGezin ?? true), "false")}>Nee</option>
+        </select>
+      </label>
+      <label>
+        Actief
+        <select name="actief" required>
+          <option value="true"${selectedAttr(String(rule.actief ?? true), "true")}>Ja</option>
+          <option value="false"${selectedAttr(String(rule.actief ?? true), "false")}>Nee</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit">${submitLabel}</button>
+        ${editingRule ? "<button type=\"button\" class=\"subtle-button\" data-cancel-recovery-rule-edit>Annuleer</button>" : ""}
+      </div>
+    </form>
+  `;
+}
+
+function getRecoveryRuleTitle(rule) {
+  return `${getPersonLabel(rule.persoonId)} na ${formatCodeLabel(rule.dienstType)}`;
+}
+
+function getRecoveryRuleMeta(rule) {
+  return [
+    RECOVERY_RULE_CONTEXT[rule.context] || formatCodeLabel(rule.context),
+    `tot ${rule.herstelTot}`,
+    RECOVERY_RULE_STRENGTH[rule.hardheid] || formatCodeLabel(rule.hardheid),
+    rule.geldtVoorSchoolGezin ? "blokkeert school/gezin" : "alleen diensten",
+    rule.actief ? "actief" : "uit"
   ].join(" - ");
 }
 
@@ -1939,6 +2056,14 @@ function getWishTemplates() {
   return state.data.instellingen.wensSjablonen;
 }
 
+function getRecoveryRules() {
+  if (!Array.isArray(state.data.instellingen.herstelRegels)) {
+    state.data.instellingen.herstelRegels = [];
+  }
+  state.data.instellingen.herstelRegels = normalizeRecoveryRules(state.data.instellingen.herstelRegels);
+  return state.data.instellingen.herstelRegels;
+}
+
 function updateContractHours(input) {
   const nextContracts = {};
   Object.keys(CONTRACT_HOURS).forEach((personId) => {
@@ -2072,6 +2197,67 @@ function getWishTemplateKey(template) {
     template.categorie || "",
     template.scope || "",
     template.timing || ""
+  ].join("|");
+}
+
+function addRecoveryRule(input) {
+  const rule = {
+    id: state.editingRecoveryRuleId || generateId("herstelregel"),
+    persoonId: PERSON_LABELS[input.persoonId] ? input.persoonId : "persoon_jij",
+    dienstType: SERVICE_TYPES.includes(input.dienstType) ? input.dienstType : "nacht",
+    context: RECOVERY_RULE_CONTEXT[input.context] ? input.context : "losse_dienst",
+    herstelTot: input.herstelTot || "",
+    hardheid: RECOVERY_RULE_STRENGTH[input.hardheid] ? input.hardheid : "sterk",
+    geldtVoorSchoolGezin: input.geldtVoorSchoolGezin !== "false",
+    actief: input.actief !== "false"
+  };
+
+  if (!rule.herstelTot) return;
+
+  const reason = state.editingRecoveryRuleId ? "herstelregel_bijgewerkt" : "herstelregel_toegevoegd";
+  state.data.instellingen.herstelRegels = [
+    ...getRecoveryRules().filter((item) => {
+      if (state.editingRecoveryRuleId) return item.id !== state.editingRecoveryRuleId;
+      return getRecoveryRuleKey(item) !== getRecoveryRuleKey(rule);
+    }),
+    rule
+  ];
+  state.editingRecoveryRuleId = null;
+  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+  saveData(reason);
+  renderSettingsPanel();
+}
+
+function deleteRecoveryRule(id) {
+  state.data.instellingen.herstelRegels = getRecoveryRules().filter((rule) => rule.id !== id);
+  if (state.editingRecoveryRuleId === id) state.editingRecoveryRuleId = null;
+  state.data.maandPlanningen.forEach((month) => runAnalysis(month.id));
+  saveData("herstelregel_verwijderd");
+  renderSettingsPanel();
+}
+
+function startEditRecoveryRule(id) {
+  if (!getRecoveryRules().some((rule) => rule.id === id)) return;
+  state.editingRecoveryRuleId = id;
+  renderSettingsPanel();
+}
+
+function cancelEditRecoveryRule() {
+  state.editingRecoveryRuleId = null;
+  renderSettingsPanel();
+}
+
+function getEditingRecoveryRule() {
+  if (!state.editingRecoveryRuleId) return null;
+  return getRecoveryRules().find((rule) => rule.id === state.editingRecoveryRuleId) || null;
+}
+
+function getRecoveryRuleKey(rule) {
+  return [
+    rule.persoonId || "",
+    rule.dienstType || "",
+    rule.context || "",
+    rule.herstelTot || ""
   ].join("|");
 }
 
@@ -2399,6 +2585,18 @@ function bindEvents() {
       return;
     }
 
+    const editRecoveryRuleButton = event.target.closest("[data-edit-recovery-rule]");
+    if (editRecoveryRuleButton) {
+      startEditRecoveryRule(editRecoveryRuleButton.dataset.editRecoveryRule);
+      return;
+    }
+
+    const deleteRecoveryRuleButton = event.target.closest("[data-delete-recovery-rule]");
+    if (deleteRecoveryRuleButton) {
+      deleteRecoveryRule(deleteRecoveryRuleButton.dataset.deleteRecoveryRule);
+      return;
+    }
+
     const deleteChildButton = event.target.closest("[data-delete-child]");
     if (deleteChildButton) {
       deleteChild(deleteChildButton.dataset.deleteChild);
@@ -2429,6 +2627,11 @@ function bindEvents() {
 
     if (event.target.closest("[data-cancel-wish-template-edit]")) {
       cancelEditWishTemplate();
+      return;
+    }
+
+    if (event.target.closest("[data-cancel-recovery-rule-edit]")) {
+      cancelEditRecoveryRule();
       return;
     }
 
@@ -2513,6 +2716,13 @@ function bindEvents() {
     if (event.target.id === "wish-template-form") {
       event.preventDefault();
       addWishTemplate(formToObject(event.target));
+      event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "recovery-rule-form") {
+      event.preventDefault();
+      addRecoveryRule(formToObject(event.target));
       event.target.reset();
       return;
     }
