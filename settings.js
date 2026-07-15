@@ -434,19 +434,7 @@ function renderSettingsWishTemplateForm(editingTemplate = null) {
     <form id="wish-template-form" class="duty-name-form settings-duty-form">
       <label>
         Naam
-        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. samen vrij weekend" required>
-      </label>
-      <label>
-        Categorie
-        <select name="categorie" required>
-          ${renderOptions(Object.keys(WISH_TEMPLATE_CATEGORIES), WISH_TEMPLATE_CATEGORIES, template.categorie || "samen_vrij")}
-        </select>
-      </label>
-      <label>
-        Geldt voor
-        <select name="scope" required>
-          ${renderOptions(Object.keys(WISH_TEMPLATE_SCOPE), WISH_TEMPLATE_SCOPE, template.scope || "gezin")}
-        </select>
+        <input name="naam" type="text" value="${escapeHtml(template.naam || "")}" placeholder="Bijv. Marjolein weekend beschermen" required>
       </label>
       <label>
         Hardheid
@@ -455,10 +443,8 @@ function renderSettingsWishTemplateForm(editingTemplate = null) {
         </select>
       </label>
       <label>
-        Wanneer
-        <select name="timing" required>
-          ${renderOptions(Object.keys(WISH_TEMPLATE_TIMING), WISH_TEMPLATE_TIMING, template.timing || "hele_maand")}
-        </select>
+        Voor wie geldt dit?
+        <input name="voorWieTekst" type="text" value="${escapeHtml(template.voorWieTekst || WISH_TEMPLATE_SCOPE[template.scope] || "")}" placeholder="Bijv. Ronald, Eva, gezin, Ronald en Marjolein">
       </label>
       <label>
         Actief
@@ -468,8 +454,24 @@ function renderSettingsWishTemplateForm(editingTemplate = null) {
         </select>
       </label>
       <label class="full-width">
+        Kernzin
+        <textarea name="kernzin" placeholder="Wat wil je dat het systeem onthoudt? Bijv. Als Marjolein bij ons is, werkt Ronald niet.">${escapeHtml(template.kernzin || "")}</textarea>
+      </label>
+      <label class="full-width">
+        Wanneer speelt dit?
+        <textarea name="wanneerTekst" placeholder="Bijv. weekend waarin Marjolein bij ons is, na een nachtdienst, schooldagen, vrijdagavond">${escapeHtml(template.wanneerTekst || WISH_TEMPLATE_TIMING[template.timing] || "")}</textarea>
+      </label>
+      <label class="full-width">
+        Wat moet vermeden worden?
+        <textarea name="vermijdTekst" placeholder="Bijv. diensten tijdens haar verblijf, vroege dienst na late dienst, spitsdiensten">${escapeHtml(template.vermijdTekst || "")}</textarea>
+      </label>
+      <label class="full-width">
+        Wat mag juist wel?
+        <textarea name="magWelTekst" placeholder="Bijv. nachtdienst na vertrek zaterdag of zondag, dienst als Eva thuis is">${escapeHtml(template.magWelTekst || "")}</textarea>
+      </label>
+      <label class="full-width">
         Toelichting
-        <textarea name="beschrijving" placeholder="Kort en concreet, bijvoorbeeld: minimaal 1 dagdeel samen vrij">${escapeHtml(template.beschrijving || "")}</textarea>
+        <textarea name="beschrijving" placeholder="Extra nuance, uitzonderingen of reden. Dit is vrije tekst voor later AI-advies.">${escapeHtml(template.beschrijving || "")}</textarea>
       </label>
       <div class="form-actions">
         <button type="submit">${submitLabel}</button>
@@ -481,12 +483,11 @@ function renderSettingsWishTemplateForm(editingTemplate = null) {
 
 function getWishTemplateMeta(template) {
   return [
-    WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie),
-    WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope),
     WISH_TEMPLATE_STRENGTH[template.hardheid] || formatCodeLabel(template.hardheid),
-    WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing),
+    template.voorWieTekst || WISH_TEMPLATE_SCOPE[template.scope] || "",
+    template.wanneerTekst || WISH_TEMPLATE_TIMING[template.timing] || "",
     template.actief ? "actief" : "uit"
-  ].join(" - ");
+  ].filter(Boolean).join(" - ");
 }
 
 function getDutyNameMeta(dutyName) {
@@ -661,15 +662,20 @@ function addWishTemplate(input) {
   const template = {
     id: state.editingWishTemplateId || generateId("wens_sjabloon"),
     naam: String(input.naam || "").trim(),
-    categorie: WISH_TEMPLATE_CATEGORIES[input.categorie] ? input.categorie : "overig",
-    scope: WISH_TEMPLATE_SCOPE[input.scope] ? input.scope : "gezin",
+    categorie: "overig",
+    scope: inferWishTemplateScope(input.voorWieTekst),
     hardheid: WISH_TEMPLATE_STRENGTH[input.hardheid] ? input.hardheid : "normaal",
-    timing: WISH_TEMPLATE_TIMING[input.timing] ? input.timing : "hele_maand",
+    timing: inferWishTemplateTiming(input.wanneerTekst),
+    kernzin: String(input.kernzin || "").trim(),
+    wanneerTekst: String(input.wanneerTekst || "").trim(),
+    voorWieTekst: String(input.voorWieTekst || "").trim(),
+    vermijdTekst: String(input.vermijdTekst || "").trim(),
+    magWelTekst: String(input.magWelTekst || "").trim(),
     beschrijving: String(input.beschrijving || "").trim(),
     actief: input.actief !== "false"
   };
 
-  if (!template.naam) return;
+  if (!template.naam || !template.kernzin) return;
 
   const reason = state.editingWishTemplateId ? "wenssjabloon_bijgewerkt" : "wenssjabloon_toegevoegd";
   state.data.instellingen.wensSjablonen = [
@@ -710,10 +716,29 @@ function getEditingWishTemplate() {
 function getWishTemplateKey(template) {
   return [
     String(template.naam || "").trim().toLowerCase(),
-    template.categorie || "",
-    template.scope || "",
-    template.timing || ""
+    String(template.kernzin || "").trim().toLowerCase(),
+    String(template.voorWieTekst || "").trim().toLowerCase(),
+    String(template.wanneerTekst || "").trim().toLowerCase()
   ].join("|");
+}
+
+function inferWishTemplateScope(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("ronald") && text.includes("eva")) return "beiden";
+  if (text.includes("ronald")) return "persoon_jij";
+  if (text.includes("eva")) return "persoon_vrouw";
+  if (text.includes("gezin") || text.includes("kind") || text.includes("marjolein")) return "gezin";
+  return "gezin";
+}
+
+function inferWishTemplateTiming(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("nacht")) return "na_nachtdienst";
+  if (text.includes("weekend") || text.includes("zaterdag") || text.includes("zondag")) return "weekend";
+  if (text.includes("school")) return "schooldag";
+  if (text.includes("spits") || text.includes("file")) return "spits";
+  if (text.includes("weekdag") || text.includes("maandag") || text.includes("dinsdag") || text.includes("woensdag") || text.includes("donderdag") || text.includes("vrijdag")) return "weekdag";
+  return "hele_maand";
 }
 
 function addDutyName(input) {

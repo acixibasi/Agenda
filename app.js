@@ -151,6 +151,11 @@ function normalizeWishTemplates(value) {
       scope: WISH_TEMPLATE_SCOPE[template.scope] ? template.scope : "gezin",
       hardheid: WISH_TEMPLATE_STRENGTH[template.hardheid] ? template.hardheid : "normaal",
       timing: WISH_TEMPLATE_TIMING[template.timing] ? template.timing : "hele_maand",
+      kernzin: String(template.kernzin || template.naam || "").trim(),
+      wanneerTekst: String(template.wanneerTekst || (WISH_TEMPLATE_TIMING[template.timing] || "")).trim(),
+      voorWieTekst: String(template.voorWieTekst || (WISH_TEMPLATE_SCOPE[template.scope] || "")).trim(),
+      vermijdTekst: String(template.vermijdTekst || "").trim(),
+      magWelTekst: String(template.magWelTekst || "").trim(),
       beschrijving: String(template.beschrijving || template.opmerking || "").trim(),
       actief: template.actief !== false && template.actief !== "false"
     }))
@@ -173,6 +178,11 @@ function legacyRecoveryRulesToWishTemplates(value) {
         scope: PERSON_LABELS[rule.persoonId] ? rule.persoonId : "persoon_jij",
         hardheid: WISH_TEMPLATE_STRENGTH[rule.hardheid] ? rule.hardheid : "sterk",
         timing: rule.dienstType === "nacht" ? "na_nachtdienst" : "hele_maand",
+        kernzin: `Na ${formatCodeLabel(rule.dienstType || "dienst")} herstellen tot ${rule.herstelTot}`,
+        wanneerTekst: contextLabel,
+        voorWieTekst: getPersonLabel(rule.persoonId || "persoon_jij"),
+        vermijdTekst: `Geen conflicterende ${targetLabel} voor ${rule.herstelTot}.`,
+        magWelTekst: "",
         beschrijving: `Omgezet uit oude herstelregel: ${contextLabel}, ${targetLabel}.`,
         actief: rule.actief !== false && rule.actief !== "false"
       };
@@ -721,10 +731,14 @@ function buildAdviceContextText(input) {
 }
 
 function formatWishTemplateForContext(template) {
-  const category = WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie);
-  const scope = WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope);
-  const timing = WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing);
-  return [category, scope, timing, template.beschrijving].filter(Boolean).join(" - ");
+  return [
+    template.kernzin ? `kern: ${template.kernzin}` : "",
+    template.voorWieTekst ? `voor wie: ${template.voorWieTekst}` : "",
+    template.wanneerTekst ? `wanneer: ${template.wanneerTekst}` : "",
+    template.vermijdTekst ? `vermijd: ${template.vermijdTekst}` : "",
+    template.magWelTekst ? `mag wel: ${template.magWelTekst}` : "",
+    template.beschrijving ? `toelichting: ${template.beschrijving}` : ""
+  ].filter(Boolean).join(" | ");
 }
 
 function renderWishTemplateContext(templates) {
@@ -749,13 +763,13 @@ function renderWishTemplateContext(templates) {
 }
 
 function renderWishTemplateContextItem(template) {
-  const category = WISH_TEMPLATE_CATEGORIES[template.categorie] || formatCodeLabel(template.categorie);
-  const scope = WISH_TEMPLATE_SCOPE[template.scope] || formatCodeLabel(template.scope);
-  const timing = WISH_TEMPLATE_TIMING[template.timing] || formatCodeLabel(template.timing);
   return `
     <article class="control-finding preference-finding">
       <strong>${escapeHtml(template.naam)}</strong>
-      <span>${escapeHtml(category)} - ${escapeHtml(scope)} - ${escapeHtml(timing)}</span>
+      ${template.kernzin ? `<span>${escapeHtml(template.kernzin)}</span>` : ""}
+      ${template.voorWieTekst || template.wanneerTekst ? `<span>${escapeHtml([template.voorWieTekst, template.wanneerTekst].filter(Boolean).join(" - "))}</span>` : ""}
+      ${template.vermijdTekst ? `<span>Vermijd: ${escapeHtml(template.vermijdTekst)}</span>` : ""}
+      ${template.magWelTekst ? `<span>Mag wel: ${escapeHtml(template.magWelTekst)}</span>` : ""}
       ${template.beschrijving ? `<span>${escapeHtml(template.beschrijving)}</span>` : ""}
     </article>
   `;
