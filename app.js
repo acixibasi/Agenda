@@ -967,6 +967,7 @@ function renderAdvicePreparation(scan) {
     aanvullen: "Nog aanvullen",
     niet_klaar: "Eerst oplossen"
   }[scan.status];
+  const aiAdvices = getAiAdvicesForMonth(scan.month.id);
   return `
     <section class="panel advice-prep advice-prep-${escapeHtml(scan.status)}">
       <div class="control-header">
@@ -1015,7 +1016,57 @@ function renderAdvicePreparation(scan) {
         </div>
         <textarea class="ai-context-text" readonly data-ai-context-output>${escapeHtml(scan.contextText)}</textarea>
       </div>
+
+      <div class="ai-response-panel">
+        <div class="advice-context-header">
+          <h4>AI-testantwoord</h4>
+          <span class="control-meta">${aiAdvices.length} opgeslagen</span>
+        </div>
+        <textarea class="ai-response-input" data-ai-advice-input placeholder="Plak hier het AI-antwoord na je test. De app bewaart het lokaal bij deze maand en probeert de opties als losse punten te tonen."></textarea>
+        <div class="form-actions">
+          <button type="button" data-save-ai-advice="${escapeHtml(scan.month.id)}">AI-advies opslaan</button>
+        </div>
+        ${renderAiAdviceList(aiAdvices)}
+      </div>
     </section>
+  `;
+}
+
+function getAiAdvicesForMonth(monthId) {
+  return state.data.keuzeOpties
+    .filter((option) => option.maandPlanningId === monthId && option.type === "ai_advies")
+    .sort((a, b) => String(b.aangemaaktOp || "").localeCompare(String(a.aangemaaktOp || "")));
+}
+
+function renderAiAdviceList(advices) {
+  if (!advices.length) {
+    return "<p class=\"muted-text\">Nog geen AI-testadvies opgeslagen.</p>";
+  }
+
+  return `
+    <div class="ai-advice-list">
+      ${advices.map(renderAiAdviceCard).join("")}
+    </div>
+  `;
+}
+
+function renderAiAdviceCard(advice) {
+  const options = Array.isArray(advice.opties) ? advice.opties : [];
+  return `
+    <article class="ai-advice-card">
+      <div class="ai-advice-card-header">
+        <div>
+          <strong>AI-advies</strong>
+          <span>${escapeHtml(formatDateTime(advice.aangemaaktOp))}</span>
+        </div>
+        <button type="button" class="tiny-button danger-text-button" data-delete-ai-advice="${escapeHtml(advice.id)}">Verwijder advies</button>
+      </div>
+      ${options.length ? `
+        <ol class="ai-option-list">
+          ${options.map((option) => `<li>${escapeHtml(option)}</li>`).join("")}
+        </ol>
+      ` : `<pre class="ai-advice-raw">${escapeHtml(advice.tekst)}</pre>`}
+    </article>
   `;
 }
 
@@ -2135,6 +2186,18 @@ function bindEvents() {
       return;
     }
 
+    const saveAiAdviceButton = event.target.closest("[data-save-ai-advice]");
+    if (saveAiAdviceButton) {
+      saveAiAdvice(saveAiAdviceButton.dataset.saveAiAdvice);
+      return;
+    }
+
+    const deleteAiAdviceButton = event.target.closest("[data-delete-ai-advice]");
+    if (deleteAiAdviceButton) {
+      deleteAiAdvice(deleteAiAdviceButton.dataset.deleteAiAdvice);
+      return;
+    }
+
     const advanceStageButton = event.target.closest("[data-advance-month-stage]");
     if (advanceStageButton) {
       advanceMonthStage(advanceStageButton.dataset.advanceMonthStage);
@@ -2481,6 +2544,68 @@ function copyTextWithFallback(text) {
   const copied = document.execCommand && document.execCommand("copy");
   textarea.remove();
   setSaveStatus(copied ? "AI-context gekopieerd" : "Kopieer de AI-context handmatig", !copied);
+}
+
+function saveAiAdvice(monthId) {
+  const month = getMonth(monthId);
+  const input = document.querySelector("[data-ai-advice-input]");
+  const text = String(input?.value || "").trim();
+  if (!month || !text) {
+    setSaveStatus("Geen AI-advies om op te slaan", true);
+    return;
+  }
+
+  state.data.keuzeOpties.push({
+    id: generateId("ai_advies"),
+    maandPlanningId: monthId,
+    type: "ai_advies",
+    bronId: "bron_ai_test_handmatig",
+    aangemaaktOp: new Date().toISOString(),
+    status: "concept",
+    tekst: text,
+    opties: extractAiAdviceOptions(text)
+  });
+  if (input) input.value = "";
+  saveData("ai_advies_opgeslagen");
+  renderApp();
+}
+
+function deleteAiAdvice(adviceId) {
+  const advice = state.data.keuzeOpties.find((option) => option.id === adviceId && option.type === "ai_advies");
+  if (!advice) return;
+  const ok = window.confirm("AI-advies verwijderen?\n\nAlleen dit lokale testadvies wordt verwijderd.");
+  if (!ok) return;
+  state.data.keuzeOpties = state.data.keuzeOpties.filter((option) => option.id !== adviceId);
+  saveData("ai_advies_verwijderd");
+  renderApp();
+}
+
+function extractAiAdviceOptions(text) {
+  const cleaned = String(text || "").replace(/\r\n/g, "\n").trim();
+  if (!cleaned) return [];
+  const lines = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
+  const options = [];
+  let current = "";
+
+  lines.forEach((line) => {
+    const startsOption = /^(\d+[\).:-]\s+|optie\s+\d+[:.-]\s+)/i.test(line);
+    if (startsOption) {
+      if (current) options.push(current.trim());
+      current = line.replace(/^(\d+[\).:-]\s+|optie\s+\d+[:.-]\s+)/i, "").trim();
+      return;
+    }
+    if (current) {
+      current = `${current} ${line}`;
+    }
+  });
+
+  if (current) options.push(current.trim());
+  if (options.length) return options.slice(0, 8);
+
+  return lines
+    .filter((line) => /^[-*]\s+/.test(line))
+    .map((line) => line.replace(/^[-*]\s+/, "").trim())
+    .slice(0, 8);
 }
 
 function getPersonLabel(personId) {
