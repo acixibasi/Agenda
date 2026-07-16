@@ -53,11 +53,14 @@ function restoreAnalysisState(result, statuses) {
 
 function buildAnalysisContext(monthId) {
   const services = getMonthItems(monthId, "diensten");
+  const plannedServices = services.filter((service) => !isPublishedRosterService(service));
+  const publishedServices = services.filter(isPublishedRosterService);
   return {
     monthId,
     month: getMonth(monthId),
-    services: services.filter((service) => !isPublishedRosterService(service)),
-    publishedServices: services.filter(isPublishedRosterService),
+    services: getServicesForActiveAnalysis(getMonth(monthId), plannedServices, publishedServices),
+    plannedServices,
+    publishedServices,
     familyBlocks: [
       ...getMonthItems(monthId, "gezinsVerplichtingen"),
       ...getSchoolCoverageBlocksForMonth(getMonth(monthId))
@@ -67,6 +70,13 @@ function buildAnalysisContext(monthId) {
     analyses: getMonthItems(monthId, "analyseResultaten"),
     actions: getMonthItems(monthId, "actieItems")
   };
+}
+
+function getServicesForActiveAnalysis(month, plannedServices, publishedServices) {
+  if (month?.planningStage === "R4_gepubliceerd" && publishedServices.length) {
+    return publishedServices;
+  }
+  return plannedServices;
 }
 
 function clearGeneratedAnalysis(monthId) {
@@ -183,7 +193,7 @@ function checkPublishedRosterDeviation(context) {
   if (context.month?.planningStage !== "R4_gepubliceerd") return results;
 
   context.publishedServices.forEach((publishedService) => {
-    const plannedServices = context.services.filter((service) => {
+    const plannedServices = context.plannedServices.filter((service) => {
       return service.persoonId === publishedService.persoonId && service.datum === publishedService.datum;
     });
 
