@@ -271,6 +271,7 @@ function createMonth(year, month, planningStage) {
   state.data.instellingen.actieveMaandId = monthId;
   state.quickEntry = null;
   state.selectedDate = `${monthId}-01`;
+  placeFamilyTemplatesInMonth(monthPlanning);
   runAnalysis(monthId);
   saveData("maand_aangemaakt");
   showView("cockpit");
@@ -504,6 +505,7 @@ function renderMonthCockpit() {
       </div>
       <div class="toolbar">
         <button type="button" class="subtle-button" data-view-target="months">Maanden</button>
+        <button type="button" data-request-ai-roster="${escapeHtml(month.id)}">AI rooster aanvullen</button>
         ${nextStage ? `<button type="button" data-advance-month-stage="${escapeHtml(month.id)}">Zet naar ${escapeHtml(nextStage.label)}</button>` : "<button type=\"button\" class=\"subtle-button\" disabled>Laatste ronde</button>"}
         <label class="stage-select-label">
           Ronde
@@ -1039,6 +1041,8 @@ function getAiAdviceOptionObjects(advice) {
         tekst: String(option.tekst || "").trim(),
         status: option.status || "open",
         actieId: option.actieId || "",
+        dienstId: option.dienstId || "",
+        voorstel: option.voorstel && typeof option.voorstel === "object" ? option.voorstel : null,
         bijgewerktOp: option.bijgewerktOp || ""
       };
     }
@@ -1053,13 +1057,16 @@ function getAiAdviceOptionObjects(advice) {
 
 function renderAiAdviceOption(advice, option, index) {
   const statusLabel = getAiOptionStatusLabel(option.status);
+  const proposal = option.voorstel?.soort === "dienst" ? option.voorstel : null;
   return `
     <li class="ai-option ai-option-${escapeHtml(option.status || "open")}">
       <div class="ai-option-text">
         <span>${escapeHtml(option.tekst)}</span>
+        ${proposal ? `<small>Voorstel: ${escapeHtml(formatLongDate(proposal.datum))} ${escapeHtml(getPersonLabel(proposal.persoonId))} ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "dienst")}</small>` : ""}
         ${option.status && option.status !== "open" ? `<strong>${escapeHtml(statusLabel)}</strong>` : ""}
       </div>
       <div class="ai-option-actions">
+        ${proposal && option.status !== "geaccepteerd" ? `<button type="button" class="tiny-button" data-accept-ai-duty="${escapeHtml(advice.id)}" data-ai-option-index="${index}">Accepteer dienst</button>` : ""}
         <button type="button" class="tiny-button" data-ai-option-status="${escapeHtml(advice.id)}" data-ai-option-index="${index}" data-ai-option-value="gekozen">Markeer gekozen</button>
         <button type="button" class="tiny-button" data-ai-option-action="${escapeHtml(advice.id)}" data-ai-option-index="${index}">Gebruik als actie</button>
         <button type="button" class="tiny-button danger-text-button" data-ai-option-status="${escapeHtml(advice.id)}" data-ai-option-index="${index}" data-ai-option-value="nagaan">Klopt niet / nagaan</button>
@@ -1074,6 +1081,7 @@ function getAiOptionStatusLabel(status) {
     actie: "Actie gemaakt",
     nagaan: "Klopt niet / nagaan",
     genegeerd: "Genegeerd",
+    geaccepteerd: "Dienst geaccepteerd",
     open: "Open"
   };
   return labels[status] || formatCodeLabel(status || "open");
@@ -1092,12 +1100,16 @@ function buildAdviceContextText(input) {
   const lines = [
     "OPDRACHT VOOR AI:",
     "Je bent roostercoach voor Ronald en Eva.",
-    "Geef maximaal 5 concrete opties voor Ronde 2.",
+    "Maak een concreet werkroostervoorstel of aanvulling voor de actuele ronde.",
+    "Geef maximaal 10 concrete dienstvoorstellen en maximaal 5 korte controleadviezen.",
     "Sorteer van minst ingrijpend naar meest ingrijpend.",
     "Houd rekening met werk, gezin, school, reistijd, wensen en gezamenlijke vrije tijd.",
     "Doe geen aannames over beschikbaarheid in het werkgeversysteem.",
-    "Noem bij elke optie wat Ronald/Eva handmatig moet checken of wijzigen.",
-    "Wijzig niets automatisch. Geef bondig advies in gewone taal.",
+    "Gebruik alleen dienstnamen uit TOEGESTANE DIENSTNAMEN.",
+    "Wijzig niets automatisch. De gebruiker accepteert elke voorgestelde dienst zelf.",
+    "Zet elke voorgestelde dienst exact in dit formaat op een eigen regel:",
+    "DIENSTVOORSTEL: datum=JJJJ-MM-DD; persoon=Ronald of Eva; dienst=exacte dienstnaam; reden=korte reden",
+    "Zet overige opmerkingen als korte regels met OPTIE:",
     "",
     "CONTEXT:",
     `Maand: ${getMonthLabel(input.month.id)} (${getStageLabel(input.month.planningStage)})`,
@@ -1111,6 +1123,9 @@ function buildAdviceContextText(input) {
     "",
     "Diensten:",
     ...formatServicesForAiContext(input.services),
+    "",
+    "TOEGESTANE DIENSTNAMEN:",
+    ...formatDutyNamesForAiContext(input.month),
     "",
     "Open Ronde 2 diensten met mogelijke opties:",
     ...formatOpenSwitchServicesForAiContext(input.openSwitchServices),
@@ -1145,6 +1160,41 @@ function formatServicesForAiContext(services) {
       const check = service.sleutelAkkoord ? "R2 akkoord" : "R2 open";
       return `- ${formatLongDate(service.datum)} ${getPersonLabel(service.persoonId)}: ${service.dienstCode || formatCodeLabel(service.dienstType)} ${formatTimeRange(service.start, service.einde)} ${service.locatie || ""} (${check}, ${getServiceTravelLabel(service) || "geen reistijd"})`;
     });
+}
+
+function formatDutyNamesForAiContext(month) {
+  const activeStage = month?.planningStage || state.data.instellingen.standaardPlanningStage;
+  const dates = month ? getMonthDateValues(month) : [];
+  const lines = [];
+
+  Object.keys(PERSON_LABELS).forEach((personId) => {
+    const personDates = dates.length ? dates : [""];
+    const available = getDutyNames().filter((dutyName) => {
+      if (!(dutyName.persoonId === "beiden" || dutyName.persoonId === personId)) return false;
+      if (getPlanningStageIndex(activeStage) < getPlanningStageIndex(dutyName.beschikbaarVanaf)) return false;
+      return personDates.some((date) => isDutyNameAvailableOnDate(dutyName, date));
+    });
+
+    if (!available.length) {
+      lines.push(`- ${getPersonLabel(personId)}: geen beheerde dienstnamen beschikbaar in ${getStageLabel(activeStage)}`);
+      return;
+    }
+
+    available.forEach((dutyName) => {
+      lines.push(`- ${getPersonLabel(personId)}: ${dutyName.naam} ${formatTimeRange(dutyName.start, dutyName.einde)} ${dutyName.post || dutyName.locatie || ""} (${getDutyNameWeekdayLabel(dutyName)})`);
+    });
+  });
+
+  return lines.slice(0, 80);
+}
+
+function getDutyNameWeekdayLabel(dutyName) {
+  const days = normalizeDutyWeekdays(dutyName.beschikbareDagen);
+  if (days.length === 7) return "hele week";
+  return WEEKDAY_OPTIONS
+    .filter((option) => days.includes(option.value))
+    .map((option) => option.label)
+    .join(", ");
 }
 
 function formatOpenSwitchServicesForAiContext(services) {
@@ -1307,7 +1357,8 @@ function renderMonthBoardDay(day) {
   const status = getDayBoardStatus(day);
   const isSelected = state.selectedDate === day.date;
   const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + day.schoolEvents.length;
-  const signalCount = day.analyses.length + day.actions.length;
+  const proposalCount = Array.isArray(day.dutyProposals) ? day.dutyProposals.filter((proposal) => proposal.status !== "geaccepteerd").length : 0;
+  const signalCount = day.analyses.length + day.actions.length + proposalCount;
   return `
     <button type="button" class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
       <span class="month-board-day-top">
@@ -1320,6 +1371,7 @@ function renderMonthBoardDay(day) {
         ${day.familyBlocks.map(renderMonthBoardFamilyBlock).join("")}
         ${day.schoolEvents.map(renderMonthBoardSchoolEvent).join("")}
         ${day.wishes.map(renderMonthBoardWish).join("")}
+        ${(day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd").map(renderMonthBoardDutyProposal).join("")}
         ${day.actions.map(renderMonthBoardAction).join("")}
         ${day.analyses.map(renderMonthBoardAnalysis).join("")}
         ${!itemCount && !signalCount ? "<span class=\"month-board-item month-board-item-empty\">Geen invoer</span>" : ""}
@@ -1330,10 +1382,11 @@ function renderMonthBoardDay(day) {
 
 function getDayBoardStatus(day) {
   const activeAnalyses = day.analyses.filter((result) => !["gezien", "bewust_akkoord", "vervallen"].includes(result.actieStatus));
+  const openProposals = (day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd");
   if (activeAnalyses.some((result) => result.ernst === "conflict")) {
     return { type: "conflict", icon: "X", label: "conflict" };
   }
-  if (activeAnalyses.length || day.actions.length) {
+  if (activeAnalyses.length || day.actions.length || openProposals.length) {
     return { type: "attention", icon: "!", label: "controle nodig" };
   }
   return { type: "good", icon: "✓", label: "geen conflict" };
@@ -1373,6 +1426,14 @@ function renderMonthBoardWish(wish) {
   return `
     <span class="month-board-item month-board-item-wish">
       Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}
+    </span>
+  `;
+}
+
+function renderMonthBoardDutyProposal(proposal) {
+  return `
+    <span class="month-board-item month-board-item-proposal">
+      AI: ${escapeHtml(getPersonLabel(proposal.persoonId))} ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "dienstvoorstel")}
     </span>
   `;
 }
@@ -1576,6 +1637,8 @@ function renderDayDetail(day) {
   const hasCoveredAnalyses = Array.isArray(day.coveredAnalyses) && day.coveredAnalyses.length > 0;
   const hasActions = day.actions.length > 0;
   const hasClosedActions = Array.isArray(day.closedActions) && day.closedActions.length > 0;
+  const dutyProposals = (day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd");
+  const hasDutyProposals = dutyProposals.length > 0;
 
   return `
     <section class="panel day-detail" data-day-detail="${escapeHtml(day.date)}" tabindex="-1" aria-live="polite">
@@ -1610,6 +1673,12 @@ function renderDayDetail(day) {
         </div>
         <div class="day-detail-block">
           <h4>Aandacht en acties</h4>
+          ${hasDutyProposals ? `
+            <div class="covered-analysis-list">
+              <strong>AI dienstvoorstellen</strong>
+              ${dutyProposals.map(renderDutyProposalDetail).join("")}
+            </div>
+          ` : ""}
           ${hasAnalyses ? day.analyses.map(renderAnalysisDetail).join("") : (!hasCoveredAnalyses ? "<p class=\"muted-text\">Geen analysepunten.</p>" : "")}
           ${hasActions ? day.actions.map(renderCompactActionDetail).join("") : "<p class=\"muted-text\">Geen open acties.</p>"}
           ${hasClosedActions ? `
@@ -1627,6 +1696,22 @@ function renderDayDetail(day) {
         </div>
       </div>
     </section>
+  `;
+}
+
+function renderDutyProposalDetail(proposal) {
+  const statusLabel = getAiOptionStatusLabel(proposal.status);
+  return `
+    <article class="detail-item detail-item-proposal">
+      <strong>${escapeHtml(getPersonLabel(proposal.persoonId))}: ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "Dienstvoorstel")}</strong>
+      <span>${escapeHtml(formatTimeRange(proposal.start || "", proposal.einde || ""))}${proposal.locatie ? ` - ${escapeHtml(proposal.locatie)}` : ""}</span>
+      ${proposal.reden ? `<span>${escapeHtml(proposal.reden)}</span>` : ""}
+      ${proposal.status && proposal.status !== "open" ? `<span>Status: ${escapeHtml(statusLabel)}</span>` : ""}
+      <div class="action-buttons">
+        <button type="button" class="tiny-button" data-accept-ai-duty="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}">Accepteer dienst</button>
+        <button type="button" class="tiny-button danger-text-button" data-ai-option-status="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}" data-ai-option-value="nagaan">Klopt niet / nagaan</button>
+      </div>
+    </article>
   `;
 }
 
@@ -2247,6 +2332,12 @@ function bindEvents() {
       return;
     }
 
+    const requestAiRosterButton = event.target.closest("[data-request-ai-roster]");
+    if (requestAiRosterButton) {
+      requestAiRoster(requestAiRosterButton.dataset.requestAiRoster);
+      return;
+    }
+
     const saveAiAdviceButton = event.target.closest("[data-save-ai-advice]");
     if (saveAiAdviceButton) {
       saveAiAdvice(saveAiAdviceButton.dataset.saveAiAdvice);
@@ -2272,6 +2363,12 @@ function bindEvents() {
     const aiOptionActionButton = event.target.closest("[data-ai-option-action]");
     if (aiOptionActionButton) {
       createActionFromAiAdviceOption(aiOptionActionButton.dataset.aiOptionAction, aiOptionActionButton.dataset.aiOptionIndex);
+      return;
+    }
+
+    const acceptAiDutyButton = event.target.closest("[data-accept-ai-duty]");
+    if (acceptAiDutyButton) {
+      acceptAiDutyProposal(acceptAiDutyButton.dataset.acceptAiDuty, acceptAiDutyButton.dataset.aiOptionIndex);
       return;
     }
 
@@ -2750,6 +2847,43 @@ async function requestAiAdvice(monthId) {
   }
 }
 
+async function requestAiRoster(monthId) {
+  const month = getMonth(monthId);
+  if (!month) {
+    setSaveStatus("Geen maand gevonden voor AI-rooster", true);
+    return;
+  }
+
+  const scan = buildAdviceScanForMonth(month);
+  const context = scan.contextText;
+  if (!context) {
+    setSaveStatus("Geen AI-context gevonden", true);
+    return;
+  }
+
+  setSaveStatus("AI-roostervoorstel wordt opgehaald...");
+  try {
+    const response = await fetch(getAiEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "AI-aanvraag mislukt.");
+    saveAiAdviceText(monthId, data.text || "", "bron_openai_rooster");
+    renderApp();
+    setSaveStatus("AI-roostervoorstel opgeslagen");
+  } catch (error) {
+    setSaveStatus(`AI niet bereikbaar: ${error.message}`, true);
+  }
+}
+
+function buildAdviceScanForMonth(month) {
+  const days = buildMonthDays(month);
+  const controlSummary = buildControlSummary(month, days);
+  return buildAdviceReadiness(month, days, controlSummary);
+}
+
 function getAiEndpoint() {
   if (window.location.protocol === "file:") return "http://127.0.0.1:8787/api/ai-advies";
   return "/api/ai-advies";
@@ -2762,6 +2896,7 @@ function saveAiAdviceText(monthId, text, sourceId) {
     return false;
   }
 
+  const extractedOptions = extractAiAdviceOptions(cleaned);
   state.data.keuzeOpties.push({
     id: generateId("ai_advies"),
     maandPlanningId: monthId,
@@ -2770,10 +2905,12 @@ function saveAiAdviceText(monthId, text, sourceId) {
     aangemaaktOp: new Date().toISOString(),
     status: "concept",
     tekst: cleaned,
-    opties: extractAiAdviceOptions(cleaned).map((option) => ({
-      tekst: option,
+    opties: extractedOptions.map((option) => ({
+      tekst: typeof option === "string" ? option : option.tekst,
       status: "open",
       actieId: "",
+      dienstId: "",
+      voorstel: typeof option === "object" ? option.voorstel : null,
       bijgewerktOp: ""
     }))
   });
@@ -2831,6 +2968,92 @@ function createActionFromAiAdviceOption(adviceId, optionIndex) {
   renderApp();
 }
 
+function acceptAiDutyProposal(adviceId, optionIndex) {
+  const advice = getAiAdviceById(adviceId);
+  const index = Number(optionIndex);
+  if (!advice || !Number.isInteger(index)) return;
+  const options = normalizeAiAdviceOptions(advice);
+  const option = options[index];
+  const proposal = option?.voorstel?.soort === "dienst" ? option.voorstel : null;
+  if (!proposal) {
+    setSaveStatus("Geen dienstvoorstel gevonden", true);
+    return;
+  }
+  if (option.status === "geaccepteerd" && option.dienstId) {
+    setSaveStatus("Dit voorstel is al geaccepteerd", true);
+    return;
+  }
+
+  const dutyName = findDutyNameForAiProposal(proposal, advice.maandPlanningId);
+  if (!dutyName) {
+    option.status = "nagaan";
+    option.bijgewerktOp = new Date().toISOString();
+    advice.opties = options;
+    saveData("ai_dienstvoorstel_nagaan");
+    renderApp();
+    setSaveStatus("Dienstvoorstel matcht geen beheerde dienstnaam voor deze dag/ronde", true);
+    return;
+  }
+
+  const duplicate = state.data.diensten.find((service) => {
+    return service.datum === proposal.datum &&
+      service.persoonId === proposal.persoonId &&
+      String(service.dienstCode || "").trim().toLowerCase() === String(dutyName.naam || "").trim().toLowerCase();
+  });
+  if (duplicate) {
+    const ok = window.confirm("Deze dienst lijkt al in de maand te staan. Toch nogmaals toevoegen?");
+    if (!ok) return;
+  }
+
+  const service = createServiceFromDutyProposal(proposal, dutyName, advice);
+  state.data.diensten.push(service);
+  option.status = "geaccepteerd";
+  option.dienstId = service.id;
+  option.bijgewerktOp = new Date().toISOString();
+  advice.opties = options;
+  state.selectedDate = service.datum;
+  runAnalysis(service.maandPlanningId);
+  saveData("ai_dienstvoorstel_geaccepteerd");
+  renderApp();
+  setSaveStatus("AI-dienstvoorstel geaccepteerd");
+}
+
+function findDutyNameForAiProposal(proposal, monthId) {
+  const month = getMonth(monthId || dateToMonthId(proposal.datum));
+  const activeStage = month?.planningStage || state.data.instellingen.standaardPlanningStage;
+  const targetName = normalizeAiText(proposal.dienstNaam || proposal.dienstCode);
+  if (!targetName || !proposal.datum || !proposal.persoonId) return null;
+
+  return getDutyNames().find((dutyName) => {
+    if (normalizeAiText(dutyName.naam) !== targetName) return false;
+    if (!(dutyName.persoonId === "beiden" || dutyName.persoonId === proposal.persoonId)) return false;
+    return isDutyNameAvailableFor(dutyName, proposal.persoonId, activeStage, proposal.datum);
+  }) || null;
+}
+
+function createServiceFromDutyProposal(proposal, dutyName, advice) {
+  return {
+    id: generateId("dienst"),
+    persoonId: proposal.persoonId,
+    maandPlanningId: advice.maandPlanningId,
+    datum: proposal.datum,
+    start: dutyName.start,
+    einde: dutyName.einde,
+    dienstCode: dutyName.naam,
+    dienstType: dutyName.dienstType,
+    locatie: dutyName.post || dutyName.locatie || proposal.locatie || "",
+    roosterLaag: dutyName.dienstType === "instructie" ? "instructie" : "regulier",
+    status: "wens",
+    bronId: advice.id,
+    ruilbaar: "onbekend",
+    sleutelAkkoord: false,
+    reistijdVoorMinuten: toPositiveNumber(dutyName.reistijdVoorMinuten, DEFAULT_TRAVEL_MINUTES),
+    reistijdNaMinuten: toPositiveNumber(dutyName.reistijdNaMinuten, DEFAULT_TRAVEL_MINUTES),
+    reisOpmerking: dutyName.reisOpmerking || "",
+    opmerking: `AI-voorstel: ${proposal.reden || "geen reden opgegeven"}`
+  };
+}
+
 function getAiAdviceById(adviceId) {
   return state.data.keuzeOpties.find((option) => option.id === adviceId && option.type === "ai_advies") || null;
 }
@@ -2855,10 +3078,15 @@ function extractAiAdviceOptions(text) {
   const cleaned = String(text || "").replace(/\r\n/g, "\n").trim();
   if (!cleaned) return [];
   const lines = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
+  const proposals = lines
+    .map(parseAiDutyProposalLine)
+    .filter(Boolean)
+    .slice(0, 20);
   const options = [];
   let current = "";
 
   lines.forEach((line) => {
+    if (/^dienstvoorstel\s*:/i.test(line)) return;
     const startsOption = /^(\d+[\).:-]\s+|optie\s+\d+[:.-]\s+)/i.test(line);
     if (startsOption) {
       if (current) options.push(current.trim());
@@ -2871,12 +3099,68 @@ function extractAiAdviceOptions(text) {
   });
 
   if (current) options.push(current.trim());
-  if (options.length) return options.slice(0, 8);
+  if (proposals.length || options.length) {
+    return [
+      ...proposals,
+      ...options.slice(0, 8).map((option) => ({ tekst: option, voorstel: null }))
+    ];
+  }
 
   return lines
     .filter((line) => /^[-*]\s+/.test(line))
     .map((line) => line.replace(/^[-*]\s+/, "").trim())
-    .slice(0, 8);
+    .slice(0, 8)
+    .map((option) => ({ tekst: option, voorstel: null }));
+}
+
+function parseAiDutyProposalLine(line) {
+  const match = String(line || "").match(/^dienstvoorstel\s*:\s*(.+)$/i);
+  if (!match) return null;
+  const fields = {};
+  match[1].split(";").forEach((part) => {
+    const [rawKey, ...rawValue] = part.split("=");
+    const key = normalizeAiText(rawKey);
+    const value = rawValue.join("=").trim();
+    if (key && value) fields[key] = value;
+  });
+
+  const datum = fields.datum || fields.date || "";
+  const personId = parseAiPerson(fields.persoon || fields.person || "");
+  const dienstNaam = fields.dienst || fields.dienstnaam || fields.service || "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datum) || !personId || !dienstNaam) return null;
+
+  const voorstel = {
+    soort: "dienst",
+    datum,
+    persoonId: personId,
+    dienstNaam: dienstNaam.trim(),
+    dienstCode: dienstNaam.trim(),
+    reden: fields.reden || fields.reason || "",
+    start: "",
+    einde: "",
+    locatie: ""
+  };
+
+  return {
+    tekst: `${formatLongDate(datum)} ${getPersonLabel(personId)}: ${dienstNaam}${voorstel.reden ? ` - ${voorstel.reden}` : ""}`,
+    voorstel
+  };
+}
+
+function parseAiPerson(value) {
+  const normalized = normalizeAiText(value);
+  if (["ronald", "ik", "jij", "persoonjij"].includes(normalized)) return "persoon_jij";
+  if (["eva", "vrouw", "persoonvrouw"].includes(normalized)) return "persoon_vrouw";
+  return "";
+}
+
+function normalizeAiText(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function getPersonLabel(personId) {

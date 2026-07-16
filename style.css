@@ -1199,6 +1199,11 @@ textarea {
   color: var(--attention-text);
 }
 
+.month-board-item-proposal {
+  background: #eef2ff;
+  color: #3730a3;
+}
+
 .month-board-item-analysis {
   background: var(--incomplete);
   color: var(--incomplete-text);
@@ -1588,6 +1593,12 @@ textarea {
   background: var(--good);
   border-color: #7bc995;
   color: var(--good-text);
+}
+
+.detail-item-proposal {
+  background: #eef2ff;
+  border-color: #a5b4fc;
+  color: #312e81;
 }
 
 .signal-conflict,

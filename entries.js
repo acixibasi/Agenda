@@ -109,6 +109,7 @@ function buildMonthDays(month) {
   const coveredAnalyses = getCoveredAnalyses(month.id);
   const actions = getOpenActions(month.id);
   const closedActions = getClosedActions(month.id);
+  const dutyProposals = getAiDutyProposalsForMonth(month.id);
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = index + 1;
@@ -122,8 +123,26 @@ function buildMonthDays(month) {
       analyses: analyses.filter((item) => item.datum === date),
       coveredAnalyses: coveredAnalyses.filter((item) => item.datum === date),
       actions: actions.filter((item) => item.datum === date || item.deadline === date),
-      closedActions: closedActions.filter((item) => item.datum === date || item.deadline === date)
+      closedActions: closedActions.filter((item) => item.datum === date || item.deadline === date),
+      dutyProposals: dutyProposals.filter((item) => item.datum === date)
     };
+  });
+}
+
+function getAiDutyProposalsForMonth(monthId) {
+  return state.data.keuzeOpties.flatMap((advice) => {
+    if (advice.type !== "ai_advies" || advice.maandPlanningId !== monthId || !Array.isArray(advice.opties)) return [];
+    return advice.opties
+      .map((option, index) => ({ advice, option, index }))
+      .filter(({ option }) => option?.voorstel?.soort === "dienst")
+      .map(({ advice, option, index }) => ({
+        adviesId: advice.id,
+        optieIndex: index,
+        status: option.status || "open",
+        tekst: option.tekst || "",
+        aangemaaktOp: advice.aangemaaktOp || "",
+        ...option.voorstel
+      }));
   });
 }
 
@@ -250,9 +269,26 @@ function autoPlaceFamilyTemplatesForActiveMonth() {
     return;
   }
 
+  const { added, skipped, firstDate } = placeFamilyTemplatesInMonth(month);
+
+  if (!added) {
+    window.alert(`Geen nieuwe overige gezinsmomenten toegevoegd. ${skipped} moment(en) stonden al in ${getMonthLabel(month.id)}.`);
+    return;
+  }
+
+  state.selectedDate = firstDate || `${month.id}-01`;
+  runAnalysis(month.id);
+  saveData("overige_gezinsmomenten_automatisch_geplaatst");
+  window.alert(`${added} overige gezinsmoment(en) toegevoegd aan ${getMonthLabel(month.id)}. ${skipped} bestaande moment(en) overgeslagen.`);
+  showView("cockpit");
+}
+
+function placeFamilyTemplatesInMonth(month) {
+  const templates = getFamilyTemplates();
   const dates = getMonthDateValues(month);
   let added = 0;
   let skipped = 0;
+  let firstDate = "";
 
   templates.forEach((template) => {
     dates.forEach((date) => {
@@ -264,19 +300,11 @@ function autoPlaceFamilyTemplatesForActiveMonth() {
       }
       state.data.gezinsVerplichtingen.push(familyBlock);
       added += 1;
+      if (!firstDate) firstDate = date;
     });
   });
 
-  if (!added) {
-    window.alert(`Geen nieuwe overige gezinsmomenten toegevoegd. ${skipped} moment(en) stonden al in ${getMonthLabel(month.id)}.`);
-    return;
-  }
-
-  state.selectedDate = dates[0] || `${month.id}-01`;
-  runAnalysis(month.id);
-  saveData("overige_gezinsmomenten_automatisch_geplaatst");
-  window.alert(`${added} overige gezinsmoment(en) toegevoegd aan ${getMonthLabel(month.id)}. ${skipped} bestaande moment(en) overgeslagen.`);
-  showView("cockpit");
+  return { added, skipped, firstDate };
 }
 
 function getMonthDateValues(month) {
