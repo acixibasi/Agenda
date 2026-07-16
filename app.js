@@ -1640,6 +1640,7 @@ function dayMatchesFilter(day, filter) {
 function renderControlFinding(result) {
   const isNotification = result.ernst === "notificatie";
   const isClosedNotification = isNotification && ["gezien", "bewust_akkoord"].includes(result.actieStatus);
+  const isPublishedRosterCheck = isPublishedRosterAnalysis(result);
   return `
     <article class="control-finding control-finding-link ${isClosedNotification ? "control-finding-closed" : ""}" data-open-day="${escapeHtml(result.datum)}" role="button" tabindex="0">
       <span class="day-link-label">Ga naar dag: ${escapeHtml(formatLongDate(result.datum))}</span>
@@ -1648,8 +1649,21 @@ function renderControlFinding(result) {
       ${isClosedNotification ? `<span class="control-meta">Status: ${escapeHtml(formatCodeLabel(result.actieStatus))}</span>` : ""}
       ${renderLinkedServiceActions(result)}
       ${isNotification ? renderNotificationButtons(result) : ""}
-      ${!isNotification ? renderCoverageNoteForm(result) : ""}
+      ${isPublishedRosterCheck ? renderPublishedRosterCheckButtons(result) : ""}
+      ${!isNotification && !isPublishedRosterCheck ? renderCoverageNoteForm(result) : ""}
     </article>
+  `;
+}
+
+function isPublishedRosterAnalysis(result) {
+  return result?.categorie === "gepubliceerd_rooster" || String(result?.regelId || "").startsWith("controle_gepubliceerd_rooster_");
+}
+
+function renderPublishedRosterCheckButtons(result) {
+  return `
+    <div class="notification-actions">
+      <button type="button" class="tiny-button" data-notification-status="bewust_akkoord" data-analysis-id="${escapeHtml(result.id)}">Gecontroleerd</button>
+    </div>
   `;
 }
 
@@ -1952,13 +1966,15 @@ function renderWishDetail(wish) {
 
 function renderAnalysisDetail(result) {
   const isCovered = result.actieStatus === "afgedekt";
+  const isPublishedRosterCheck = isPublishedRosterAnalysis(result);
   return `
     <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")} ${isCovered ? "detail-item-covered" : ""}" data-day-problem="${escapeHtml(getAnalysisProblemId(result))}" tabindex="-1">
       <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
       ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
       ${isCovered ? `<span>Status: afgedekt${result.afgedektOp ? ` op ${escapeHtml(formatDateTime(result.afgedektOp))}` : ""}</span>` : ""}
       ${isCovered && result.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(result.afdekNotitie)}</span>` : ""}
-      ${result.ernst !== "notificatie" ? renderCoverageNoteForm(result) : ""}
+      ${isPublishedRosterCheck ? renderPublishedRosterCheckButtons(result) : ""}
+      ${result.ernst !== "notificatie" && !isPublishedRosterCheck ? renderCoverageNoteForm(result) : ""}
     </article>
   `;
 }
