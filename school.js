@@ -327,6 +327,153 @@ function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
   window.alert(`${added} vakantie/studiedag item(s) geimporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
 }
 
+function importRosterIcalUrls() {
+  const urls = getRosterIcalUrls();
+  const entries = Object.entries(urls).filter(([, url]) => String(url || "").trim());
+  if (!entries.length) {
+    window.alert("Vul eerst minimaal een rooster-iCal link in en sla deze op.");
+    return Promise.resolve();
+  }
+
+  return Promise.all(entries.map(([personId, url]) => importRosterIcalUrlForPerson(personId, url)))
+    .then((results) => {
+      const added = results.reduce((sum, result) => sum + result.added, 0);
+      const skipped = results.reduce((sum, result) => sum + result.skipped, 0);
+      window.alert(`${added} gepubliceerde roosteritem(s) geimporteerd. ${skipped} item(s) overgeslagen.`);
+    });
+}
+
+function importRosterIcalUrlForPerson(personId, url) {
+  const fetchUrl = normalizeCalendarUrl(url);
+  const fetchCalendar = window.fetch || fetch;
+  return fetchCalendar(fetchUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    })
+    .then((text) => importRosterIcalText(personId, text, url, false))
+    .catch(() => {
+      window.alert(`De rooster-iCal link van ${getPersonLabel(personId)} kon niet worden ingelezen. Download dan het .ics-bestand en gebruik de bestand-import.`);
+      return { added: 0, skipped: 0 };
+    });
+}
+
+function importRosterIcalFile(personId, file) {
+  if (!file) return;
+  file.text()
+    .then((text) => {
+      const result = importRosterIcalText(personId, text, file.name || "rooster.ics", false);
+      window.alert(`${result.added} gepubliceerde roosteritem(s) geimporteerd voor ${getPersonLabel(personId)}. ${result.skipped} item(s) overgeslagen.`);
+    })
+    .catch(() => window.alert("Rooster-iCal bestand kon niet worden gelezen."));
+}
+
+function importRosterIcalText(personId, text, sourceName = "rooster.ics", showAlert = true) {
+  const sourceId = getRosterIcalSourceId(personId);
+  const events = parseIcalEvents(text);
+  const services = events
+    .map((event) => mapRosterIcalEventToService(event, personId, sourceName))
+    .filter(Boolean);
+  const skipped = events.length - services.length;
+  const affectedMonthIds = new Set(services.map((service) => service.maandPlanningId));
+
+  state.data.diensten = state.data.diensten.filter((service) => {
+    if (service.bronId !== sourceId || !isPublishedRosterService(service)) return true;
+    affectedMonthIds.add(service.maandPlanningId);
+    return false;
+  });
+  state.data.diensten.push(...services);
+  affectedMonthIds.forEach((monthId) => ensurePublishedRosterMonth(monthId));
+  affectedMonthIds.forEach(runAnalysis);
+
+  if (services.length || affectedMonthIds.size) {
+    saveData("rooster_ical_geimporteerd");
+    renderSettingsPanel();
+    if (state.currentView === "cockpit") renderApp();
+  }
+  if (showAlert) {
+    window.alert(`${services.length} gepubliceerde roosteritem(s) geimporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
+  }
+  return { added: services.length, skipped };
+}
+
+function mapRosterIcalEventToService(event, personId, sourceName) {
+  const start = parseIcalDateTime(event.DTSTART);
+  const end = parseIcalDateTime(event.DTEND);
+  if (!start || !end) return null;
+  const summary = String(event.SUMMARY || "Gepubliceerde dienst").trim();
+  const dutyName = findRosterDutyNameForEvent(personId, summary, start.time, end.time);
+  const monthId = dateToMonthId(start.date);
+  return {
+    id: generateId("dienst"),
+    persoonId: personId,
+    maandPlanningId: monthId,
+    datum: start.date,
+    start: dutyName?.start || start.time,
+    einde: dutyName?.einde || end.time,
+    dienstCode: dutyName?.naam || summary,
+    dienstType: dutyName?.dienstType || inferDutyTypeFromTime(start.time, end.time),
+    locatie: dutyName?.locatie || dutyName?.post || String(event.LOCATION || "").trim(),
+    roosterLaag: "gepubliceerd_rooster",
+    status: "gepubliceerd",
+    bronId: getRosterIcalSourceId(personId),
+    ruilbaar: "nee",
+    sleutelAkkoord: true,
+    reistijdVoorMinuten: toPositiveNumber(dutyName?.reistijdVoorMinuten, DEFAULT_TRAVEL_MINUTES),
+    reistijdNaMinuten: toPositiveNumber(dutyName?.reistijdNaMinuten, DEFAULT_TRAVEL_MINUTES),
+    reisOpmerking: dutyName?.reisOpmerking || "",
+    opmerking: `Geimporteerd uit ${sourceName}`
+  };
+}
+
+function parseIcalDateTime(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
+  if (!match) return null;
+  return {
+    date: `${match[1]}-${match[2]}-${match[3]}`,
+    time: `${match[4]}:${match[5]}`
+  };
+}
+
+function findRosterDutyNameForEvent(personId, summary, start, end) {
+  const normalizedSummary = normalizeAiText(summary);
+  return getDutyNames().find((dutyName) => {
+    if (!(dutyName.persoonId === personId || dutyName.persoonId === "beiden")) return false;
+    return normalizeAiText(dutyName.naam) && normalizedSummary.includes(normalizeAiText(dutyName.naam));
+  }) || getDutyNames().find((dutyName) => {
+    if (!(dutyName.persoonId === personId || dutyName.persoonId === "beiden")) return false;
+    return dutyName.start === start && dutyName.einde === end;
+  }) || null;
+}
+
+function inferDutyTypeFromTime(start, end) {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  if (startMinutes === null || endMinutes === null) return "overig";
+  if (endMinutes <= startMinutes || startMinutes >= 20 * 60) return "nacht";
+  if (startMinutes >= 12 * 60) return "laat";
+  if (startMinutes < 8 * 60) return "vroeg";
+  return "dag";
+}
+
+function getRosterIcalSourceId(personId) {
+  return `bron_rooster_ical_${personId}`;
+}
+
+function ensurePublishedRosterMonth(monthId) {
+  if (getMonth(monthId)) return;
+  const [year, month] = monthId.split("-").map(Number);
+  state.data.maandPlanningen.push({
+    id: monthId,
+    jaar: year,
+    maand: month,
+    planningStage: "R4_gepubliceerd",
+    samenvattingStatus: "goed",
+    aangemaaktOp: new Date().toISOString()
+  });
+}
+
 function parseIcalEvents(text) {
   const lines = unfoldIcalLines(String(text || ""));
   const events = [];

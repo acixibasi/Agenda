@@ -2567,6 +2567,11 @@ function bindEvents() {
       return;
     }
 
+    if (event.target.closest("[data-import-roster-ical-urls]")) {
+      importRosterIcalUrls();
+      return;
+    }
+
     const editDutyNameButton = event.target.closest("[data-edit-duty-name]");
     if (editDutyNameButton) {
       startEditDutyName(editDutyNameButton.dataset.editDutyName);
@@ -2828,6 +2833,11 @@ function bindEvents() {
 
     if (event.target.matches("[data-school-ical-file]")) {
       importSchoolIcalFile(event.target.files[0]);
+      event.target.value = "";
+    }
+
+    if (event.target.matches("[data-roster-ical-file]")) {
+      importRosterIcalFile(event.target.dataset.rosterIcalFile, event.target.files[0]);
       event.target.value = "";
     }
   });

@@ -153,8 +153,17 @@ function renderSettingsPanel() {
         `).join("")}
         <div class="form-actions full-width">
           <button type="submit">Rooster-iCal links opslaan</button>
+          <button type="button" class="subtle-button" data-import-roster-ical-urls>Rooster-iCal links inlezen</button>
         </div>
-        <p class="muted-text full-width">Deze links zijn bedoeld voor het gepubliceerde R4-rooster. Importeren naar diensten bouwen we hierna gecontroleerd, zodat bestaande keuzes niet automatisch worden overschreven.</p>
+        <div class="form-actions full-width">
+          ${Object.keys(PERSON_LABELS).map((personId) => `
+            <label class="file-button subtle-file-button">
+              iCal-bestand ${escapeHtml(getPersonLabel(personId))}
+              <input type="file" accept=".ics,.ical,text/calendar" data-roster-ical-file="${escapeHtml(personId)}">
+            </label>
+          `).join("")}
+        </div>
+        <p class="muted-text full-width">Deze links zijn bedoeld voor het gepubliceerde R4-rooster. Import slaat diensten op als aparte R4-laag en overschrijft je R2/R3-keuzes niet.</p>
       </form>
     </section>
 
