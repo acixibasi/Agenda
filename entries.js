@@ -354,24 +354,101 @@ function addFamilyBlock(input) {
     return;
   }
 
-  const familyBlock = {
-    id: generateId("gezin"),
-    maandPlanningId: monthId,
-    type: input.type,
-    kindId: "",
-    datum: input.datum,
-    start: input.start,
-    einde: input.einde,
-    hardheid: input.hardheid,
-    dekkingNodig: input.dekkingNodig === "true",
-    opmerking: input.opmerking.trim()
-  };
+  const familyBlocks = createFamilyBlocksFromInput(input);
+  if (!familyBlocks.length) return;
 
-  state.data.gezinsVerplichtingen.push(familyBlock);
+  familyBlocks.forEach((familyBlock) => {
+    ensureMonthExistsForDate(familyBlock.datum);
+    state.data.gezinsVerplichtingen.push(familyBlock);
+  });
   state.selectedDate = input.datum;
-  runAnalysis(monthId);
-  saveData("gezinsverplichting_toegevoegd");
+  [...new Set(familyBlocks.map((block) => block.maandPlanningId))].forEach(runAnalysis);
+  saveData(familyBlocks.length > 1 ? "meerdaagse_gezinsverplichting_toegevoegd" : "gezinsverplichting_toegevoegd");
   showView("cockpit");
+}
+
+function createFamilyBlocksFromInput(input) {
+  const dateValues = getDateRangeValues(input.datum, input.einddatum || input.datum);
+  if (!dateValues.length) {
+    window.alert("Controleer de startdatum en einddatum van deze afspraak.");
+    return [];
+  }
+
+  if (dateValues.length > 62) {
+    window.alert("Deze meerdaagse afspraak is te lang. Gebruik maximaal 62 dagen per invoer.");
+    return [];
+  }
+
+  const rangeId = dateValues.length > 1 ? generateId("reeks") : "";
+  return dateValues.map((dateValue, index) => {
+    const isFirst = index === 0;
+    const isLast = index === dateValues.length - 1;
+    const isSingleDay = dateValues.length === 1;
+    return {
+      id: generateId("gezin"),
+      maandPlanningId: dateToMonthId(dateValue),
+      type: input.type,
+      kindId: "",
+      datum: dateValue,
+      start: isSingleDay || isFirst ? input.start : "00:00",
+      einde: isSingleDay || isLast ? input.einde : "23:59",
+      hardheid: input.hardheid,
+      dekkingNodig: input.dekkingNodig === "true",
+      opmerking: input.opmerking.trim(),
+      reeksId: rangeId,
+      reeksLabel: rangeId ? `${input.datum} t/m ${input.einddatum || input.datum}` : ""
+    };
+  });
+}
+
+function getDateRangeValues(startValue, endValue) {
+  const start = parseDateValue(startValue);
+  const end = parseDateValue(endValue);
+  if (!start || !end || end < start) return [];
+
+  const values = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    values.push(formatDateValue(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return values;
+}
+
+function parseDateValue(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day, 12, 0, 0);
+  if (Number.isNaN(date.getTime())) return null;
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+
+function formatDateValue(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function ensureMonthExistsForDate(dateValue) {
+  const monthId = dateToMonthId(dateValue);
+  if (getMonth(monthId)) return;
+  const [year, month] = monthId.split("-").map(Number);
+  state.data.maandPlanningen.push({
+    id: monthId,
+    jaar: year,
+    maand: month,
+    planningStage: state.data.instellingen.standaardPlanningStage || "R1_wensen",
+    planningStageLocked: false,
+    planningStageLockReason: "",
+    samenvattingStatus: "onvolledig",
+    laatstBijgewerkt: new Date().toISOString()
+  });
+  state.data.maandPlanningen.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 function updateFamilyBlock(id, input) {

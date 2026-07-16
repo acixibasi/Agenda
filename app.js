@@ -2271,6 +2271,12 @@ function renderQuickEntry() {
             Datum
             <input name="datum" type="date" min="${minDate}" max="${maxDate}" value="${escapeHtml(editingFamilyBlock.datum || quickDate)}" required>
           </label>
+          ${state.editing?.type === "family" ? "" : `
+            <label>
+              Einddatum
+              <input name="einddatum" type="date" min="${minDate}" value="${escapeHtml(editingFamilyBlock.datum || quickDate)}">
+            </label>
+          `}
           <label>
             Start
             <input name="start" type="time" value="${escapeHtml(editingFamilyBlock.start || "")}" required>
@@ -2295,8 +2301,9 @@ function renderQuickEntry() {
           </label>
           <label class="full-width">
             Opmerking
-            <textarea name="opmerking" placeholder="Bijv. opvang dicht, sport, afspraak">${escapeHtml(editingFamilyBlock.opmerking || "")}</textarea>
+            <textarea name="opmerking" placeholder="Bijv. Ronald Ardennen, weekendbezoek, sporttoernooi">${escapeHtml(editingFamilyBlock.opmerking || "")}</textarea>
           </label>
+          ${state.editing?.type === "family" ? "" : "<p class=\"muted-text full-width\">Meerdaags: vul een einddatum in. Tussenliggende dagen worden als hele dag bezet toegevoegd.</p>"}
           <div class="form-actions full-width">
             <button type="submit">${familySubmitLabel}</button>
             ${state.editing?.type === "family" ? "<button type=\"button\" class=\"subtle-button\" data-cancel-edit>Annuleer bewerken</button>" : ""}
