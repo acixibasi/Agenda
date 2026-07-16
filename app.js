@@ -1357,9 +1357,10 @@ function renderMonthBoard(month, days) {
 function renderMonthBoardDay(day) {
   const status = getDayBoardStatus(day);
   const isSelected = state.selectedDate === day.date;
-  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + day.schoolEvents.length;
-  const proposalCount = Array.isArray(day.dutyProposals) ? day.dutyProposals.filter((proposal) => proposal.status !== "geaccepteerd").length : 0;
-  const signalCount = day.analyses.length + day.actions.length + proposalCount;
+  const schoolDeviations = getMonthBoardSchoolDeviations(day);
+  const coveredAnalyses = getMonthBoardCoveredAnalyses(day);
+  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + schoolDeviations.length + coveredAnalyses.length;
+  const signalCount = day.analyses.length;
   return `
     <article class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" role="button" tabindex="0" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
       <span class="month-board-day-top">
@@ -1370,10 +1371,9 @@ function renderMonthBoardDay(day) {
       <span class="month-board-items">
         ${day.services.map(renderMonthBoardService).join("")}
         ${day.familyBlocks.map(renderMonthBoardFamilyBlock).join("")}
-        ${day.schoolEvents.map(renderMonthBoardSchoolEvent).join("")}
+        ${schoolDeviations.map(renderMonthBoardSchoolEvent).join("")}
         ${day.wishes.map(renderMonthBoardWish).join("")}
-        ${(day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd").map(renderMonthBoardDutyProposal).join("")}
-        ${day.actions.map(renderMonthBoardAction).join("")}
+        ${coveredAnalyses.map(renderMonthBoardCoveredAnalysis).join("")}
         ${day.analyses.map(renderMonthBoardAnalysis).join("")}
         ${!itemCount && !signalCount ? "<span class=\"month-board-item month-board-item-empty\">Geen invoer</span>" : ""}
       </span>
@@ -1383,14 +1383,21 @@ function renderMonthBoardDay(day) {
 
 function getDayBoardStatus(day) {
   const activeAnalyses = day.analyses.filter((result) => !["gezien", "bewust_akkoord", "vervallen"].includes(result.actieStatus));
-  const openProposals = (day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd");
   if (activeAnalyses.some((result) => result.ernst === "conflict")) {
     return { type: "conflict", icon: "X", label: "conflict" };
   }
-  if (activeAnalyses.length || day.actions.length || openProposals.length) {
+  if (activeAnalyses.length) {
     return { type: "attention", icon: "!", label: "controle nodig" };
   }
   return { type: "good", icon: "✓", label: "geen conflict" };
+}
+
+function getMonthBoardSchoolDeviations(day) {
+  return day.schoolEvents.filter((event) => event.type !== "schooltijd");
+}
+
+function getMonthBoardCoveredAnalyses(day) {
+  return (day.coveredAnalyses || []).filter((result) => String(result.afdekNotitie || "").trim());
 }
 
 function renderMonthBoardService(service) {
@@ -1417,7 +1424,7 @@ function renderMonthBoardFamilyBlock(block) {
 function renderMonthBoardSchoolEvent(event) {
   const coverage = formatSchoolCoverageLabel(event);
   return `
-    <span class="month-board-item month-board-item-family">
+    <span class="month-board-item month-board-item-school-deviation">
       School: ${escapeHtml(event.label || formatCodeLabel(event.type))} ${escapeHtml(formatTimeRange(event.start, event.einde))}${coverage ? ` - ${escapeHtml(coverage)}` : ""}
     </span>
   `;
@@ -1431,18 +1438,10 @@ function renderMonthBoardWish(wish) {
   `;
 }
 
-function renderMonthBoardDutyProposal(proposal) {
+function renderMonthBoardCoveredAnalysis(result) {
   return `
-    <button type="button" class="month-board-item month-board-item-proposal month-board-item-button" data-open-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" data-open-day="${escapeHtml(proposal.datum)}">
-      AI: ${escapeHtml(getPersonLabel(proposal.persoonId))} ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "dienstvoorstel")}
-    </button>
-  `;
-}
-
-function renderMonthBoardAction(action) {
-  return `
-    <button type="button" class="month-board-item month-board-item-action month-board-item-button" data-open-problem="${escapeHtml(getActionProblemId(action))}" data-open-day="${escapeHtml(action.datum || action.deadline || "")}">
-      Actie: ${escapeHtml(action.titel || "open actie")}
+    <button type="button" class="month-board-item month-board-item-covered month-board-item-button" data-open-problem="${escapeHtml(getAnalysisProblemId(result))}" data-open-day="${escapeHtml(result.datum)}">
+      Oplossing: ${escapeHtml(result.afdekNotitie || "afgedekt")}
     </button>
   `;
 }

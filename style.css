@@ -1202,8 +1202,18 @@ textarea {
   color: #4c3b88;
 }
 
+.month-board-item-school-deviation {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
 .month-board-item-wish {
   background: #eef7f2;
+  color: var(--good-text);
+}
+
+.month-board-item-covered {
+  background: var(--good);
   color: var(--good-text);
 }
 
