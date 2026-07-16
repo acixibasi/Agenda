@@ -52,7 +52,7 @@ jobs:
           put entries.js
           put analysis.js
           put app.js
-          put -r root/agenda
+          put -r agenda
           put -r docs
           bye
           SFTP_COMMANDS
