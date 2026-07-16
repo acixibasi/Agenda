@@ -388,6 +388,8 @@ function checkSoftWorktimeNotifications(context) {
 
 function checkMonthlyContractHours(context) {
   const results = [];
+  if (context.month?.planningStage === "R4_gepubliceerd") return results;
+
   const servicesByPerson = groupBy(context.services.filter(isWorkingService), "persoonId");
 
   Object.entries(getContractHours()).forEach(([personId, contract]) => {
