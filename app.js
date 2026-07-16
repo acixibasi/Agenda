@@ -490,6 +490,7 @@ function renderMonthCockpit() {
 
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
+  const dutyProposals = getOpenDutyProposalsFromDays(days);
   const nextStage = getNextPlanningStage(month.planningStage);
 
   content.innerHTML = `
@@ -521,8 +522,50 @@ function renderMonthCockpit() {
 
     <div class="month-management-layout">
       ${renderMonthBoard(month, days)}
+      ${renderMonthRosterProposals(dutyProposals)}
       ${renderDayDetail(selectedDay)}
     </div>
+  `;
+}
+
+function getOpenDutyProposalsFromDays(days) {
+  return days
+    .flatMap((day) => day.dutyProposals || [])
+    .filter((proposal) => proposal.status !== "geaccepteerd")
+    .sort((a, b) => `${a.datum} ${a.persoonId} ${a.dienstNaam || ""}`.localeCompare(`${b.datum} ${b.persoonId} ${b.dienstNaam || ""}`, "nl"));
+}
+
+function renderMonthRosterProposals(proposals) {
+  if (!proposals.length) return "";
+  return `
+    <section class="panel roster-proposal-panel">
+      <div class="proposal-panel-header">
+        <div>
+          <p class="eyebrow">AI-roostervoorstellen</p>
+          <h3 class="form-section-title">${proposals.length} voorstel(len) om te accepteren</h3>
+        </div>
+        <span class="status-pill status-aandacht">Concept</span>
+      </div>
+      <div class="roster-proposal-list">
+        ${proposals.map(renderRosterProposalRow).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderRosterProposalRow(proposal) {
+  return `
+    <article class="roster-proposal-row" data-day-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" tabindex="-1">
+      <div>
+        <strong>${escapeHtml(formatLongDate(proposal.datum))} - ${escapeHtml(getPersonLabel(proposal.persoonId))}: ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "Dienstvoorstel")}</strong>
+        ${proposal.reden ? `<span>${escapeHtml(proposal.reden)}</span>` : ""}
+      </div>
+      <div class="action-buttons">
+        <button type="button" class="tiny-button" data-accept-ai-duty="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}">Accepteer dienst</button>
+        <button type="button" class="tiny-button" data-open-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" data-open-day="${escapeHtml(proposal.datum)}">Bekijk dag</button>
+        <button type="button" class="tiny-button danger-text-button" data-ai-option-status="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}" data-ai-option-value="nagaan">Klopt niet / nagaan</button>
+      </div>
+    </article>
   `;
 }
 
@@ -1107,6 +1150,7 @@ function buildAdviceContextText(input) {
     "Houd rekening met werk, gezin, school, reistijd, wensen en gezamenlijke vrije tijd.",
     "Doe geen aannames over beschikbaarheid in het werkgeversysteem.",
     "Gebruik alleen dienstnamen uit TOEGESTANE DIENSTNAMEN.",
+    "Neem instructiedagen niet mee als AI-voorstel; die worden in Ronde 1 in overleg door de werkgever toegewezen.",
     "Wijzig niets automatisch. De gebruiker accepteert elke voorgestelde dienst zelf.",
     "Zet elke voorgestelde dienst exact in dit formaat op een eigen regel:",
     "DIENSTVOORSTEL: datum=JJJJ-MM-DD; persoon=Ronald of Eva; dienst=exacte dienstnaam; reden=korte reden",
@@ -1128,6 +1172,7 @@ function buildAdviceContextText(input) {
     "",
     "TOEGESTANE DIENSTNAMEN:",
     ...formatDutyNamesForAiContext(input.month),
+    "- Instructie: niet voorstellen via AI; alleen handmatig invoeren na overleg/toewijzing werkgever.",
     "",
     "Open Ronde 2 diensten met mogelijke opties:",
     ...formatOpenSwitchServicesForAiContext(input.openSwitchServices),
@@ -1172,6 +1217,7 @@ function formatDutyNamesForAiContext(month) {
   Object.keys(PERSON_LABELS).forEach((personId) => {
     const personDates = dates.length ? dates : [""];
     const available = getDutyNames().filter((dutyName) => {
+      if (dutyName.dienstType === "instructie") return false;
       if (!(dutyName.persoonId === "beiden" || dutyName.persoonId === personId)) return false;
       if (getPlanningStageIndex(activeStage) < getPlanningStageIndex(dutyName.beschikbaarVanaf)) return false;
       return personDates.some((date) => isDutyNameAvailableOnDate(dutyName, date));
@@ -3058,6 +3104,7 @@ function findDutyNameForAiProposal(proposal, monthId) {
   if (!targetName || !proposal.datum || !proposal.persoonId) return null;
 
   return getDutyNames().find((dutyName) => {
+    if (dutyName.dienstType === "instructie") return false;
     if (normalizeAiText(dutyName.naam) !== targetName) return false;
     if (!(dutyName.persoonId === "beiden" || dutyName.persoonId === proposal.persoonId)) return false;
     return isDutyNameAvailableFor(dutyName, proposal.persoonId, activeStage, proposal.datum);
