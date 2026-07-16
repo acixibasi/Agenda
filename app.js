@@ -1416,9 +1416,15 @@ function formatServiceLabel(service) {
 function renderMonthBoardFamilyBlock(block) {
   return `
     <span class="month-board-item month-board-item-family">
-      Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}
+      ${escapeHtml(formatFamilyBlockDisplayLabel(block))}
     </span>
   `;
+}
+
+function formatFamilyBlockDisplayLabel(block) {
+  const text = String(block.opmerking || "").trim() || formatCodeLabel(block.type || "afspraak");
+  const time = formatTimeRange(block.start, block.einde);
+  return [text, time].filter(Boolean).join(" ");
 }
 
 function renderMonthBoardSchoolEvent(event) {
@@ -1593,7 +1599,7 @@ function renderDayRow(day) {
             `).join("")}
             ${day.familyBlocks.map((block) => `
               <span class="mini-item editable-item">
-                <span>Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))} ${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+                <span>${escapeHtml(formatFamilyBlockDisplayLabel(block))}</span>
                 ${renderItemButtons("family", block.id)}
               </span>
             `).join("")}
@@ -1749,10 +1755,9 @@ function renderServiceDetail(service) {
 function renderFamilyDetail(block) {
   return `
     <article class="detail-item">
-      <strong>Gezin overig: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))}</strong>
-      <span>${escapeHtml(formatTimeRange(block.start, block.einde))}</span>
+      <strong>${escapeHtml(formatFamilyBlockDisplayLabel(block))}</strong>
+      ${block.opmerking ? `<span>Type: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))}</span>` : ""}
       <span>${block.dekkingNodig ? "Dekking nodig" : "Geen dekking nodig"} - ${escapeHtml(formatCodeLabel(block.hardheid || "onbekend"))}</span>
-      ${block.opmerking ? `<span>${escapeHtml(block.opmerking)}</span>` : ""}
       ${renderItemButtons("family", block.id)}
     </article>
   `;
