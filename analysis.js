@@ -357,7 +357,7 @@ function checkSoftWorktimeNotifications(context) {
           betrokkenGezinsVerplichtingId: "",
           melding: `${getPersonLabel(personId)} heeft een lange dienst op ${formatLongDate(service.datum)}`,
           advies: "Controleer of deze lange dienst bewust akkoord is; werkgeverrooster blijft leidend.",
-          signature: `lange_dienst_${service.id}`
+          signature: `lange_dienst_${getServiceNotificationSignature(service)}`
         }));
       }
     });
@@ -377,13 +377,23 @@ function checkSoftWorktimeNotifications(context) {
           betrokkenGezinsVerplichtingId: "",
           melding: `${getPersonLabel(personId)} heeft korte rust voor ${formatLongDate(nextService.datum)}`,
           advies: "Controleer of deze korte rust bewust akkoord is; dit is geen harde blokkade in deze app.",
-          signature: `korte_rust_${service.id}_${nextService.id}`
+          signature: `korte_rust_${getServiceNotificationSignature(service)}_${getServiceNotificationSignature(nextService)}`
         }));
       }
     });
   });
 
   return results;
+}
+
+function getServiceNotificationSignature(service) {
+  return [
+    service.persoonId,
+    service.datum,
+    service.start,
+    service.einde,
+    service.dienstCode || service.dienstType || "dienst"
+  ].map((part) => String(part || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-")).join("_");
 }
 
 function checkMonthlyContractHours(context) {
