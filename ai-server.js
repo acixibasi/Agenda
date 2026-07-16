@@ -106,9 +106,11 @@ async function handleCalendarProxy(request, response) {
       return;
     }
 
-    const calendarResponse = await fetch(targetUrl, {
+    const calendarResponse = await fetch(addCalendarCacheBuster(targetUrl), {
       headers: {
         "Accept": "text/calendar,text/plain,*/*",
+        "Cache-Control": "no-store",
+        "Pragma": "no-cache",
         "User-Agent": "Roostercoach-local/0.1"
       }
     });
@@ -143,6 +145,12 @@ function isAllowedCalendarUrl(value) {
   } catch {
     return false;
   }
+}
+
+function addCalendarCacheBuster(value) {
+  const url = new URL(value);
+  url.searchParams.set("_roostercoach", String(Date.now()));
+  return url.toString();
 }
 
 function extractResponseText(data) {
