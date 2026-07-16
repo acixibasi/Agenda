@@ -812,6 +812,44 @@ textarea {
   padding-left: 22px;
 }
 
+.ai-option {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.ai-option-text {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-option-text strong {
+  color: var(--brand);
+  font-size: 0.84rem;
+}
+
+.ai-option-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ai-option-gekozen {
+  border-color: var(--good-text);
+  background: #f5fbf7;
+}
+
+.ai-option-actie {
+  border-color: var(--brand);
+  background: #f8fbff;
+}
+
+.ai-option-nagaan {
+  border-color: #e38b8b;
+  background: var(--conflict);
+}
+
 .ai-advice-raw {
   background: #f9fafb;
   border: 1px solid var(--line);

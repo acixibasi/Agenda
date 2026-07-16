@@ -1025,6 +1025,7 @@ function renderAdvicePreparation(scan) {
           <h4>AI-testantwoord</h4>
           <span class="control-meta">${aiAdvices.length} opgeslagen</span>
         </div>
+        <p class="control-meta">AI wijzigt geen diensten. Gebruik opties alleen als actie, keuze of controlepunt.</p>
         <textarea class="ai-response-input" data-ai-advice-input placeholder="Plak hier het AI-antwoord na je test. De app bewaart het lokaal bij deze maand en probeert de opties als losse punten te tonen."></textarea>
         <div class="form-actions">
           <button type="button" data-save-ai-advice="${escapeHtml(scan.month.id)}">AI-advies opslaan</button>
@@ -1054,7 +1055,7 @@ function renderAiAdviceList(advices) {
 }
 
 function renderAiAdviceCard(advice) {
-  const options = Array.isArray(advice.opties) ? advice.opties : [];
+  const options = getAiAdviceOptionObjects(advice);
   return `
     <article class="ai-advice-card">
       <div class="ai-advice-card-header">
@@ -1066,11 +1067,59 @@ function renderAiAdviceCard(advice) {
       </div>
       ${options.length ? `
         <ol class="ai-option-list">
-          ${options.map((option) => `<li>${escapeHtml(option)}</li>`).join("")}
+          ${options.map((option, index) => renderAiAdviceOption(advice, option, index)).join("")}
         </ol>
       ` : `<pre class="ai-advice-raw">${escapeHtml(advice.tekst)}</pre>`}
     </article>
   `;
+}
+
+function getAiAdviceOptionObjects(advice) {
+  if (!Array.isArray(advice.opties)) return [];
+  return advice.opties.map((option) => {
+    if (option && typeof option === "object") {
+      return {
+        tekst: String(option.tekst || "").trim(),
+        status: option.status || "open",
+        actieId: option.actieId || "",
+        bijgewerktOp: option.bijgewerktOp || ""
+      };
+    }
+    return {
+      tekst: String(option || "").trim(),
+      status: "open",
+      actieId: "",
+      bijgewerktOp: ""
+    };
+  }).filter((option) => option.tekst);
+}
+
+function renderAiAdviceOption(advice, option, index) {
+  const statusLabel = getAiOptionStatusLabel(option.status);
+  return `
+    <li class="ai-option ai-option-${escapeHtml(option.status || "open")}">
+      <div class="ai-option-text">
+        <span>${escapeHtml(option.tekst)}</span>
+        ${option.status && option.status !== "open" ? `<strong>${escapeHtml(statusLabel)}</strong>` : ""}
+      </div>
+      <div class="ai-option-actions">
+        <button type="button" class="tiny-button" data-ai-option-status="${escapeHtml(advice.id)}" data-ai-option-index="${index}" data-ai-option-value="gekozen">Markeer gekozen</button>
+        <button type="button" class="tiny-button" data-ai-option-action="${escapeHtml(advice.id)}" data-ai-option-index="${index}">Gebruik als actie</button>
+        <button type="button" class="tiny-button danger-text-button" data-ai-option-status="${escapeHtml(advice.id)}" data-ai-option-index="${index}" data-ai-option-value="nagaan">Klopt niet / nagaan</button>
+      </div>
+    </li>
+  `;
+}
+
+function getAiOptionStatusLabel(status) {
+  const labels = {
+    gekozen: "Gekozen",
+    actie: "Actie gemaakt",
+    nagaan: "Klopt niet / nagaan",
+    genegeerd: "Genegeerd",
+    open: "Open"
+  };
+  return labels[status] || formatCodeLabel(status || "open");
 }
 
 function renderAdviceMetric(label, value) {
@@ -2234,6 +2283,22 @@ function bindEvents() {
       return;
     }
 
+    const aiOptionStatusButton = event.target.closest("[data-ai-option-status]");
+    if (aiOptionStatusButton) {
+      setAiAdviceOptionStatus(
+        aiOptionStatusButton.dataset.aiOptionStatus,
+        aiOptionStatusButton.dataset.aiOptionIndex,
+        aiOptionStatusButton.dataset.aiOptionValue
+      );
+      return;
+    }
+
+    const aiOptionActionButton = event.target.closest("[data-ai-option-action]");
+    if (aiOptionActionButton) {
+      createActionFromAiAdviceOption(aiOptionActionButton.dataset.aiOptionAction, aiOptionActionButton.dataset.aiOptionIndex);
+      return;
+    }
+
     const advanceStageButton = event.target.closest("[data-advance-month-stage]");
     if (advanceStageButton) {
       advanceMonthStage(advanceStageButton.dataset.advanceMonthStage);
@@ -2727,10 +2792,75 @@ function saveAiAdviceText(monthId, text, sourceId) {
     aangemaaktOp: new Date().toISOString(),
     status: "concept",
     tekst: cleaned,
-    opties: extractAiAdviceOptions(cleaned)
+    opties: extractAiAdviceOptions(cleaned).map((option) => ({
+      tekst: option,
+      status: "open",
+      actieId: "",
+      bijgewerktOp: ""
+    }))
   });
   saveData("ai_advies_opgeslagen");
   return true;
+}
+
+function setAiAdviceOptionStatus(adviceId, optionIndex, status) {
+  const advice = getAiAdviceById(adviceId);
+  const index = Number(optionIndex);
+  if (!advice || !Number.isInteger(index)) return;
+  const options = normalizeAiAdviceOptions(advice);
+  if (!options[index]) return;
+
+  options[index].status = status || "open";
+  options[index].bijgewerktOp = new Date().toISOString();
+  advice.opties = options;
+  saveData(`ai_optie_${status || "open"}`);
+  renderApp();
+}
+
+function createActionFromAiAdviceOption(adviceId, optionIndex) {
+  const advice = getAiAdviceById(adviceId);
+  const index = Number(optionIndex);
+  if (!advice || !Number.isInteger(index)) return;
+  const options = normalizeAiAdviceOptions(advice);
+  const option = options[index];
+  if (!option) return;
+
+  const existingAction = option.actieId ? state.data.actieItems.find((action) => action.id === option.actieId) : null;
+  if (!existingAction) {
+    const action = {
+      id: generateId("actie"),
+      maandPlanningId: advice.maandPlanningId,
+      datum: `${advice.maandPlanningId}-01`,
+      titel: `AI-advies checken: ${option.tekst.slice(0, 80)}`,
+      type: "ai_advies_controleren",
+      prioriteit: "normaal",
+      deadline: `${advice.maandPlanningId}-01`,
+      status: "open",
+      gekoppeldeAnalyseIds: [],
+      advies: option.tekst,
+      generated: false,
+      bronId: advice.id,
+      aiOptieIndex: index
+    };
+    state.data.actieItems.push(action);
+    option.actieId = action.id;
+  }
+
+  option.status = "actie";
+  option.bijgewerktOp = new Date().toISOString();
+  advice.opties = options;
+  saveData("ai_optie_actie_gemaakt");
+  renderApp();
+}
+
+function getAiAdviceById(adviceId) {
+  return state.data.keuzeOpties.find((option) => option.id === adviceId && option.type === "ai_advies") || null;
+}
+
+function normalizeAiAdviceOptions(advice) {
+  const options = getAiAdviceOptionObjects(advice);
+  advice.opties = options;
+  return options;
 }
 
 function deleteAiAdvice(adviceId) {
