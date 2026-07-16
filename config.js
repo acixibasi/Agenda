@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.77-lokaal";
+const APP_VERSION = "0.1.78-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";

@@ -571,9 +571,10 @@ function updateActionStatus(actionId, status) {
 
 function updateNotificationStatus(analysisId, status) {
   const result = state.data.analyseResultaten.find((item) => item.id === analysisId);
-  if (!result || result.ernst !== "notificatie") return;
+  const isPublishedRosterCheck = result && isPublishedRosterAnalysisResult(result);
+  if (!result || (result.ernst !== "notificatie" && !isPublishedRosterCheck)) return;
 
-  if (status === "bewust_akkoord") {
+  if (status === "bewust_akkoord" && !isPublishedRosterCheck) {
     const ok = window.confirm("Deze notificatie bewust akkoord markeren? De melding verdwijnt uit de actieve notificaties, maar blijft in de historie staan.");
     if (!ok) return;
   }
@@ -581,8 +582,12 @@ function updateNotificationStatus(analysisId, status) {
   result.actieStatus = status;
   result.laatstBijgewerkt = new Date().toISOString();
   updateMonthStatus(result.maandPlanningId);
-  saveData(`notificatie_${status}`);
+  saveData(isPublishedRosterCheck ? `gepubliceerd_rooster_${status}` : `notificatie_${status}`);
   renderApp();
+}
+
+function isPublishedRosterAnalysisResult(result) {
+  return result?.categorie === "gepubliceerd_rooster" || String(result?.regelId || "").startsWith("controle_gepubliceerd_rooster_");
 }
 
 function updateLinkedAnalysisStatus(action, status) {
