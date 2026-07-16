@@ -1472,14 +1472,15 @@ function renderControlFinding(result) {
 }
 
 function renderCoverageNoteForm(result) {
+  const isCovered = result.actieStatus === "afgedekt";
   return `
     <form class="coverage-note-form" data-coverage-note-form="${escapeHtml(result.id)}">
       <label>
-        Afdekking zonder roosterwijziging
+        ${isCovered ? "Afdekking aanpassen" : "Afdekking zonder roosterwijziging"}
         <textarea data-coverage-note="${escapeHtml(result.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(result.afdekNotitie || "")}</textarea>
       </label>
       <div class="coverage-note-actions">
-        <button type="submit" class="tiny-button">Opslaan als afgedekt</button>
+        <button type="submit" class="tiny-button">${isCovered ? "Afdeknotitie opslaan" : "Opslaan als afgedekt"}</button>
       </div>
     </form>
   `;
@@ -1741,8 +1742,8 @@ function renderAnalysisDetail(result) {
       <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
       ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
       ${isCovered ? `<span>Status: afgedekt${result.afgedektOp ? ` op ${escapeHtml(formatDateTime(result.afgedektOp))}` : ""}</span>` : ""}
-      ${result.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(result.afdekNotitie)}</span>` : ""}
-      ${result.ernst !== "notificatie" && !isCovered ? renderCoverageNoteForm(result) : ""}
+      ${isCovered && result.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(result.afdekNotitie)}</span>` : ""}
+      ${result.ernst !== "notificatie" ? renderCoverageNoteForm(result) : ""}
     </article>
   `;
 }
@@ -1788,13 +1789,14 @@ function renderActionList() {
 
 function renderActionCard(action) {
   const statusMeta = action.laatstBijgewerkt ? `<p class="action-meta">Bijgewerkt: ${escapeHtml(formatDateTime(action.laatstBijgewerkt))}</p>` : "";
+  const isCovered = action.status === "afgedekt";
   return `
     <article class="action-card action-status-${escapeHtml(action.status || "open")}">
       <h3>${escapeHtml(action.titel || "Actie")}</h3>
       <p>${escapeHtml(action.type || "actie")} - ${escapeHtml(action.prioriteit || "normaal")} - ${escapeHtml(action.status || "open")}</p>
       ${action.deadline ? `<p>Deadline: ${escapeHtml(formatLongDate(action.deadline))}</p>` : ""}
       ${action.advies ? `<p>${escapeHtml(action.advies)}</p>` : ""}
-      ${action.afdekNotitie ? `<p>Afgedekt: ${escapeHtml(action.afdekNotitie)}</p>` : ""}
+      ${isCovered && action.afdekNotitie ? `<p>Afgedekt: ${escapeHtml(action.afdekNotitie)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
       ${statusMeta}
       ${renderActionCoverageNoteForm(action)}
@@ -1806,15 +1808,16 @@ function renderActionCard(action) {
 }
 
 function renderActionCoverageNoteForm(action) {
-  if (!action.generated || isClosedAction(action)) return "";
+  if (!action.generated || (isClosedAction(action) && action.status !== "afgedekt")) return "";
+  const isCovered = action.status === "afgedekt";
   return `
     <form class="coverage-note-form" data-action-coverage-note-form="${escapeHtml(action.id)}">
       <label>
-        Afdekking zonder roosterwijziging
+        ${isCovered ? "Afdekking aanpassen" : "Afdekking zonder roosterwijziging"}
         <textarea data-action-coverage-note="${escapeHtml(action.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(action.afdekNotitie || "")}</textarea>
       </label>
       <div class="coverage-note-actions">
-        <button type="submit" class="tiny-button">Opslaan als afgedekt</button>
+        <button type="submit" class="tiny-button">${isCovered ? "Afdeknotitie opslaan" : "Opslaan als afgedekt"}</button>
       </div>
     </form>
   `;
@@ -2431,6 +2434,7 @@ function bindEvents() {
     const actionStatusButton = event.target.closest("[data-action-status]");
     if (actionStatusButton) {
       updateActionStatus(actionStatusButton.dataset.actionId, actionStatusButton.dataset.actionStatus);
+      return;
     }
 
     const toggleSleutelButton = event.target.closest("[data-toggle-sleutel-service]");

@@ -512,6 +512,7 @@ function updateLinkedAnalysisStatus(action, status) {
     const linkedBySignature = action.analyseSignature && result.signature === action.analyseSignature;
     if (linkedById || linkedBySignature) {
       result.actieStatus = mappedStatus;
+      if (mappedStatus === "open") result.afgedektOp = "";
     }
   });
 }
