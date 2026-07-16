@@ -486,24 +486,14 @@ function renderMonthCockpit() {
     return;
   }
 
-  const services = getMonthItems(month.id, "diensten");
-  const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
-  const analyses = getVisibleAnalyses(month.id);
-  const actions = getOpenActions(month.id);
-  const closedActions = getClosedActions(month.id);
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
-  const controlSummary = buildControlSummary(month, days);
-  const adviceReadiness = buildAdviceReadiness(month, days, controlSummary);
-  const sleutelSummary = buildSleutelSummary(month, days);
-  const dayFilters = buildDayFilters(days);
-  const filteredDays = filterMonthDays(days, state.cockpitFilter);
   const nextStage = getNextPlanningStage(month.planningStage);
 
   content.innerHTML = `
     <div class="cockpit-header">
       <div class="cockpit-title">
-        <p class="eyebrow">Maandcockpit</p>
+        <p class="eyebrow">Maandbeheer</p>
         <h2 id="cockpit-title">${escapeHtml(getMonthLabel(month.id))}</h2>
         <div class="cockpit-badges">
           <span class="stage-pill">${escapeHtml(getStageLabel(month.planningStage))}</span>
@@ -513,8 +503,7 @@ function renderMonthCockpit() {
         </div>
       </div>
       <div class="toolbar">
-        <button type="button" class="subtle-button" data-view-target="months">Terug</button>
-        <button type="button" data-view-target="quick-entry">Snelle invoer</button>
+        <button type="button" class="subtle-button" data-view-target="months">Maanden</button>
         ${nextStage ? `<button type="button" data-advance-month-stage="${escapeHtml(month.id)}">Zet naar ${escapeHtml(nextStage.label)}</button>` : "<button type=\"button\" class=\"subtle-button\" disabled>Laatste ronde</button>"}
         <label class="stage-select-label">
           Ronde
@@ -527,41 +516,9 @@ function renderMonthCockpit() {
       </div>
     </div>
 
-    <div class="stack">
-      ${renderControlCenter(controlSummary)}
-      ${renderSleutelPanel(sleutelSummary)}
-      ${renderAdvicePreparation(adviceReadiness)}
-      ${renderMonthlyHoursPanel(month)}
+    <div class="month-management-layout">
       ${renderMonthBoard(month, days)}
-
-      <section class="panel">
-        <p class="eyebrow">Actiestrook</p>
-        ${actions.length ? actions.map(renderActionCard).join("") : "<p>Geen open acties voor deze maand.</p>"}
-        ${closedActions.length ? `
-          <div class="action-history">
-            <h3 class="subsection-title">Afgehandeld deze maand</h3>
-            ${closedActions.map(renderActionCard).join("")}
-          </div>
-        ` : ""}
-      </section>
-
-      <section class="panel">
-        <p class="eyebrow">Maandinhoud</p>
-        <div class="storage-list">
-          <div class="storage-row"><span>Diensten</span><strong>${services.length}</strong></div>
-        <div class="storage-row"><span>Overige gezinsafspraken</span><strong>${familyBlocks.length}</strong></div>
-          <div class="storage-row"><span>Wensen</span><strong>${getMonthItems(month.id, "wensen").length}</strong></div>
-          <div class="storage-row"><span>Analysepunten</span><strong>${analyses.length}</strong></div>
-        </div>
-      </section>
-
       ${renderDayDetail(selectedDay)}
-
-      ${renderCockpitFilters(dayFilters)}
-
-      <section class="stack">
-        ${filteredDays.length ? filteredDays.map(renderDayRow).join("") : "<div class=\"empty-state\">Geen dagen voor dit filter.</div>"}
-      </section>
     </div>
   `;
 }
@@ -1618,12 +1575,13 @@ function renderDayDetail(day) {
   const hasAnalyses = day.analyses.length > 0;
   const hasCoveredAnalyses = Array.isArray(day.coveredAnalyses) && day.coveredAnalyses.length > 0;
   const hasActions = day.actions.length > 0;
+  const hasClosedActions = Array.isArray(day.closedActions) && day.closedActions.length > 0;
 
   return `
     <section class="panel day-detail" data-day-detail="${escapeHtml(day.date)}" tabindex="-1" aria-live="polite">
       <div class="day-detail-header">
         <div>
-          <p class="eyebrow">Dagdetails</p>
+          <p class="eyebrow">Dagmenu</p>
           <h3 class="form-section-title">${escapeHtml(formatLongDate(day.date))}</h3>
         </div>
         <div class="toolbar">
@@ -1654,6 +1612,12 @@ function renderDayDetail(day) {
           <h4>Aandacht en acties</h4>
           ${hasAnalyses ? day.analyses.map(renderAnalysisDetail).join("") : (!hasCoveredAnalyses ? "<p class=\"muted-text\">Geen analysepunten.</p>" : "")}
           ${hasActions ? day.actions.map(renderCompactActionDetail).join("") : "<p class=\"muted-text\">Geen open acties.</p>"}
+          ${hasClosedActions ? `
+            <div class="covered-analysis-list">
+              <strong>Afgehandelde acties</strong>
+              ${day.closedActions.map(renderCompactActionDetail).join("")}
+            </div>
+          ` : ""}
           ${hasCoveredAnalyses ? `
             <div class="covered-analysis-list">
               <strong>Afgedekt zonder roosterwijziging</strong>

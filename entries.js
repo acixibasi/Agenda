@@ -108,6 +108,7 @@ function buildMonthDays(month) {
   const analyses = getVisibleAnalyses(month.id);
   const coveredAnalyses = getCoveredAnalyses(month.id);
   const actions = getOpenActions(month.id);
+  const closedActions = getClosedActions(month.id);
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const day = index + 1;
@@ -120,7 +121,8 @@ function buildMonthDays(month) {
       schoolEvents: schoolEvents.filter((item) => item.date === date),
       analyses: analyses.filter((item) => item.datum === date),
       coveredAnalyses: coveredAnalyses.filter((item) => item.datum === date),
-      actions: actions.filter((item) => item.datum === date || item.deadline === date)
+      actions: actions.filter((item) => item.datum === date || item.deadline === date),
+      closedActions: closedActions.filter((item) => item.datum === date || item.deadline === date)
     };
   });
 }
