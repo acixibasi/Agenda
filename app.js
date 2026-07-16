@@ -1779,27 +1779,11 @@ function getMonthlyHoursRows(month) {
   });
 }
 
-function renderDutyNameManager(dutyNames, activeStage) {
-  const presetButtons = dutyNames.length
-    ? dutyNames.map((dutyName) => `
-        <button type="button" class="duty-preset-button" data-apply-duty-name="${escapeHtml(dutyName.id)}" data-duty-person="${escapeHtml(dutyName.persoonId)}" data-duty-round="${escapeHtml(dutyName.beschikbaarVanaf)}">
-          <strong>${escapeHtml(dutyName.naam)}</strong>
-          <span>${escapeHtml(getDutyNameMeta(dutyName))}</span>
-        </button>
-      `).join("")
-    : "<p class=\"muted-text\">Nog geen dienstnamen opgeslagen.</p>";
-
-  return `
-    <div class="duty-name-manager">
-      <div class="duty-preset-grid">
-        ${presetButtons}
-      </div>
-      <p class="muted-text duty-empty-message" data-duty-empty-message>Geen dienstnamen voor deze persoon en ronde.</p>
-      <div class="toolbar">
-        <button type="button" class="subtle-button" data-view-target="settings">Beheer dienstkeuzes</button>
-      </div>
-    </div>
-  `;
+function renderDutyNameSelectOptions(dutyNames, selectedDutyNameId = "") {
+  return dutyNames.map((dutyName) => {
+    const selected = dutyName.id === selectedDutyNameId ? " selected" : "";
+    return `<option value="${escapeHtml(dutyName.id)}"${selected}>${escapeHtml(dutyName.naam)} - ${escapeHtml(getDutyNameMeta(dutyName))}</option>`;
+  }).join("");
 }
 
 function renderFamilyTemplateManager(templates) {
@@ -1848,12 +1832,12 @@ function renderQuickEntry() {
   const editingWish = getEditingItem("wish") || {};
   const dutyNames = getDutyNames();
   const familyTemplates = getFamilyTemplates();
-  const activeStage = month.planningStage || state.data.instellingen.standaardPlanningStage;
   const quickDate = state.quickEntry?.date || "";
   const quickLabel = quickDate ? formatLongDate(quickDate) : "";
   const serviceSubmitLabel = state.editing?.type === "service" ? "Dienst bijwerken" : "Dienst opslaan";
   const familySubmitLabel = state.editing?.type === "family" ? "Gezinsafspraak bijwerken" : "Gezinsafspraak opslaan";
   const wishSubmitLabel = state.editing?.type === "wish" ? "Wens bijwerken" : "Wens opslaan";
+  const selectedDutyNameId = findDutyNameForServiceInput(editingService)?.id || "";
 
   content.innerHTML = `
     <div class="stack">
@@ -1869,7 +1853,6 @@ function renderQuickEntry() {
 
       <section class="panel ${state.quickEntry?.type === "service" ? "quick-entry-target" : ""}">
         <h3 class="form-section-title">${state.editing?.type === "service" ? "Dienst bewerken" : "Dienst toevoegen"}</h3>
-        ${renderDutyNameManager(dutyNames, activeStage)}
         <form id="service-form" class="form-grid">
           <label>
             Persoon
@@ -1903,12 +1886,20 @@ function renderQuickEntry() {
           </label>
           <label>
             Dienstcode
-            <input name="dienstCode" type="text" value="${escapeHtml(editingService.dienstCode || "")}" placeholder="Bijv. C, D, L">
+            <select name="dienstNaamId" data-duty-name-select required>
+              <option value="">Kies dienst</option>
+              ${renderDutyNameSelectOptions(dutyNames, selectedDutyNameId)}
+            </select>
           </label>
+          <div class="duty-select-helper full-width">
+            <p class="muted-text duty-empty-message" data-duty-empty-message>Geen dienst beschikbaar voor deze persoon, datum en ronde.</p>
+            <button type="button" class="tiny-button" data-view-target="settings">Beheer dienstkeuzes</button>
+          </div>
           <label>
             Locatie
             <input name="locatie" type="text" value="${escapeHtml(editingService.locatie || "")}" placeholder="Bijv. Zuid">
           </label>
+          <input name="dienstCode" type="hidden" value="${escapeHtml(editingService.dienstCode || "")}">
           <input name="reistijdVoorMinuten" type="hidden" value="${escapeHtml(editingService.reistijdVoorMinuten || 0)}">
           <input name="reistijdNaMinuten" type="hidden" value="${escapeHtml(editingService.reistijdNaMinuten || 0)}">
           <input name="reisOpmerking" type="hidden" value="${escapeHtml(editingService.reisOpmerking || "")}">
@@ -2216,12 +2207,6 @@ function bindEvents() {
       return;
     }
 
-    const applyDutyNameButton = event.target.closest("[data-apply-duty-name]");
-    if (applyDutyNameButton) {
-      applyDutyName(applyDutyNameButton.dataset.applyDutyName);
-      return;
-    }
-
     const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
     if (applyFamilyTemplateButton) {
       applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
@@ -2452,6 +2437,14 @@ function bindEvents() {
 
     if (event.target.matches("#service-form select[name='persoonId'], #service-form input[name='datum']")) {
       updateDutyNameVisibility();
+    }
+
+    if (event.target.matches("#service-form select[name='dienstNaamId']")) {
+      if (event.target.value) {
+        applyDutyName(event.target.value);
+      } else {
+        clearDutyNameFields(event.target.form);
+      }
     }
 
     if (event.target.matches("#family-block-form input[name='datum']")) {

@@ -429,6 +429,18 @@ textarea {
   font-weight: 400;
 }
 
+.duty-select-helper {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.duty-select-helper p {
+  margin: 0;
+}
+
 .duty-name-form {
   display: grid;
   gap: 10px;

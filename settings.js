@@ -539,7 +539,9 @@ function updateDutyNameVisibility() {
   const activeStage = activeMonth?.planningStage || state.data.instellingen.standaardPlanningStage;
   const selectedPersonId = form?.elements.persoonId?.value || "persoon_jij";
   const selectedDate = form?.elements.datum?.value || "";
+  const select = form?.elements.dienstNaamId || null;
   const buttons = Array.from(document.querySelectorAll("[data-apply-duty-name]"));
+  const options = select ? Array.from(select.options).filter((option) => option.value) : [];
   let visibleCount = 0;
 
   buttons.forEach((button) => {
@@ -549,8 +551,24 @@ function updateDutyNameVisibility() {
     if (visible) visibleCount += 1;
   });
 
+  options.forEach((option) => {
+    const dutyName = getDutyNames().find((item) => item.id === option.value);
+    const visible = dutyName && isDutyNameAvailableFor(dutyName, selectedPersonId, activeStage, selectedDate);
+    option.hidden = !visible;
+    option.disabled = !visible;
+    if (visible && !buttons.length) visibleCount += 1;
+  });
+
+  if (select && select.value) {
+    const selectedDutyName = getDutyNames().find((item) => item.id === select.value);
+    if (!selectedDutyName || !isDutyNameAvailableFor(selectedDutyName, selectedPersonId, activeStage, selectedDate)) {
+      select.value = "";
+      clearDutyNameFields(form);
+    }
+  }
+
   const emptyMessage = document.querySelector("[data-duty-empty-message]");
-  if (emptyMessage) emptyMessage.hidden = visibleCount > 0 || !buttons.length;
+  if (emptyMessage) emptyMessage.hidden = visibleCount > 0;
 }
 
 function updateFamilyTemplateVisibility() {
@@ -832,6 +850,9 @@ function applyDutyName(id) {
   if (dutyName.persoonId !== "beiden") {
     form.elements.persoonId.value = dutyName.persoonId;
   }
+  if (form.elements.dienstNaamId) {
+    form.elements.dienstNaamId.value = dutyName.id;
+  }
   form.elements.dienstCode.value = dutyName.naam;
   form.elements.dienstType.value = dutyName.dienstType;
   form.elements.start.value = dutyName.start;
@@ -843,6 +864,18 @@ function applyDutyName(id) {
     form.elements.locatie.value = dutyName.post || dutyName.locatie;
   }
   updateDutyNameVisibility();
+}
+
+function clearDutyNameFields(form) {
+  if (!form) return;
+  form.elements.dienstCode.value = "";
+  form.elements.dienstType.value = "";
+  form.elements.start.value = "";
+  form.elements.einde.value = "";
+  form.elements.locatie.value = "";
+  form.elements.reistijdVoorMinuten.value = "0";
+  form.elements.reistijdNaMinuten.value = "0";
+  form.elements.reisOpmerking.value = "";
 }
 
 function applyFamilyTemplate(id) {
