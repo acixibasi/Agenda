@@ -1012,7 +1012,10 @@ function renderAdvicePreparation(scan) {
       <div class="advice-context">
         <div class="advice-context-header">
           <h4>AI-context</h4>
-          <button type="button" class="tiny-button" data-copy-ai-context>Kopieer context</button>
+          <div class="ai-context-actions">
+            <button type="button" class="tiny-button" data-request-ai-advice="${escapeHtml(scan.month.id)}">Vraag AI advies</button>
+            <button type="button" class="tiny-button" data-copy-ai-context>Kopieer context</button>
+          </div>
         </div>
         <textarea class="ai-context-text" readonly data-ai-context-output>${escapeHtml(scan.contextText)}</textarea>
       </div>
@@ -2213,6 +2216,12 @@ function bindEvents() {
       return;
     }
 
+    const requestAiAdviceButton = event.target.closest("[data-request-ai-advice]");
+    if (requestAiAdviceButton) {
+      requestAiAdvice(requestAiAdviceButton.dataset.requestAiAdvice);
+      return;
+    }
+
     const saveAiAdviceButton = event.target.closest("[data-save-ai-advice]");
     if (saveAiAdviceButton) {
       saveAiAdvice(saveAiAdviceButton.dataset.saveAiAdvice);
@@ -2667,19 +2676,61 @@ function saveAiAdvice(monthId) {
     return;
   }
 
+  saveAiAdviceText(monthId, text, "bron_ai_test_handmatig");
+  if (input) input.value = "";
+  renderApp();
+}
+
+async function requestAiAdvice(monthId) {
+  const month = getMonth(monthId);
+  const output = document.querySelector("[data-ai-context-output]");
+  const context = String(output?.value || "").trim();
+  if (!month || !context) {
+    setSaveStatus("Geen AI-context gevonden", true);
+    return;
+  }
+
+  setSaveStatus("AI-advies wordt opgehaald...");
+  try {
+    const response = await fetch(getAiEndpoint(), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ context })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "AI-aanvraag mislukt.");
+    saveAiAdviceText(monthId, data.text || "", "bron_openai_lokaal");
+    renderApp();
+    setSaveStatus("AI-advies opgeslagen");
+  } catch (error) {
+    setSaveStatus(`AI niet bereikbaar: ${error.message}`, true);
+  }
+}
+
+function getAiEndpoint() {
+  if (window.location.protocol === "file:") return "http://127.0.0.1:8787/api/ai-advies";
+  return "/api/ai-advies";
+}
+
+function saveAiAdviceText(monthId, text, sourceId) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) {
+    setSaveStatus("Geen AI-advies om op te slaan", true);
+    return false;
+  }
+
   state.data.keuzeOpties.push({
     id: generateId("ai_advies"),
     maandPlanningId: monthId,
     type: "ai_advies",
-    bronId: "bron_ai_test_handmatig",
+    bronId: sourceId,
     aangemaaktOp: new Date().toISOString(),
     status: "concept",
-    tekst: text,
-    opties: extractAiAdviceOptions(text)
+    tekst: cleaned,
+    opties: extractAiAdviceOptions(cleaned)
   });
-  if (input) input.value = "";
   saveData("ai_advies_opgeslagen");
-  renderApp();
+  return true;
 }
 
 function deleteAiAdvice(adviceId) {
