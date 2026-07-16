@@ -273,46 +273,7 @@ function checkMissingCoverage(context) {
 }
 
 function checkBothParentsBusy(context) {
-  const results = [];
-  const servicesByDate = groupBy(context.services, "datum");
-
-  Object.entries(servicesByDate).forEach(([date, services]) => {
-    const jijServices = services.filter((service) => service.persoonId === "persoon_jij");
-    const vrouwServices = services.filter((service) => service.persoonId === "persoon_vrouw");
-
-    jijServices.forEach((jijService) => {
-      vrouwServices.forEach((vrouwService) => {
-        if (!serviceBusyWindowsOverlap(jijService, vrouwService)) return;
-
-        const hasCoverageConflict = context.familyBlocks.some((block) => {
-          return block.dekkingNodig &&
-            !isCoverageProviderBlock(block) &&
-            block.datum === date &&
-            !isCoveredByFamilyCoverage(block, context.familyBlocks) &&
-            serviceBusyOverlapsBlock(jijService, block) &&
-            serviceBusyOverlapsBlock(vrouwService, block);
-        });
-
-        if (hasCoverageConflict) return;
-        if (hasFamilyCoverageForServices(jijService, vrouwService, context.familyBlocks)) return;
-
-        results.push(createAnalysisResult({
-          monthId: context.monthId,
-          datum: date,
-          ernst: "aandacht",
-          categorie: "gezin",
-          regelId: "regel_beide_ouders_bezet",
-          betrokkenDienstIds: [jijService.id, vrouwService.id],
-          betrokkenGezinsVerplichtingId: "",
-          melding: `Beide ouders werken tegelijk op ${formatLongDate(date)}`,
-          advies: "Controleer of er op dat moment schooldekking of overige gezinsdekking nodig is.",
-          signature: `beide_ouders_${jijService.id}_${vrouwService.id}`
-        }));
-      });
-    });
-  });
-
-  return results;
+  return [];
 }
 
 function isCoveredByFamilyCoverage(block, familyBlocks) {
@@ -329,15 +290,6 @@ function isCoveredByFamilyCoverage(block, familyBlocks) {
       blockEnd &&
       coverageStart <= blockStart &&
       coverageEnd >= blockEnd;
-  });
-}
-
-function hasFamilyCoverageForServices(firstService, secondService, familyBlocks) {
-  return familyBlocks.some((block) => {
-    return isCoverageProviderBlock(block) &&
-      block.datum === firstService.datum &&
-      serviceBusyOverlapsBlock(firstService, block) &&
-      serviceBusyOverlapsBlock(secondService, block);
   });
 }
 
