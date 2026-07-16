@@ -1519,15 +1519,21 @@ function getMonthBoardCoveredAnalyses(day) {
 
 function renderMonthBoardService(service) {
   return `
-    <span class="month-board-item month-board-item-service ${service.sleutelAkkoord ? "month-board-item-checked" : "month-board-item-unchecked"}">
-      <span class="sleutel-mark">${service.sleutelAkkoord ? "[x]" : "[ ]"}</span>
+    <span class="month-board-item month-board-item-service ${getMonthBoardServiceClass(service)}">
+      <span class="sleutel-mark">${isPublishedRosterService(service) ? "R4" : (service.sleutelAkkoord ? "[x]" : "[ ]")}</span>
       ${escapeHtml(formatServiceLabel(service))}${getServiceTravelLabel(service) ? ` - ${escapeHtml(getServiceTravelLabel(service))}` : ""}
     </span>
   `;
 }
 
+function getMonthBoardServiceClass(service) {
+  if (isPublishedRosterService(service)) return "month-board-item-published";
+  return service.sleutelAkkoord ? "month-board-item-checked" : "month-board-item-unchecked";
+}
+
 function formatServiceLabel(service) {
-  return `${getPersonLabel(service.persoonId)}: ${service.dienstCode || formatCodeLabel(service.dienstType || "dienst")} ${formatTimeRange(service.start, service.einde)}`;
+  const prefix = isPublishedRosterService(service) ? "Gepubliceerd " : "";
+  return `${prefix}${getPersonLabel(service.persoonId)}: ${service.dienstCode || formatCodeLabel(service.dienstType || "dienst")} ${formatTimeRange(service.start, service.einde)}`;
 }
 
 function renderMonthBoardFamilyBlock(block) {
@@ -1856,12 +1862,13 @@ function renderDutyProposalDetail(proposal) {
 }
 
 function renderServiceDetail(service) {
-  const suggestions = !service.sleutelAkkoord ? buildServiceSwitchSuggestions(service).slice(0, 4) : [];
+  const isPublished = isPublishedRosterService(service);
+  const suggestions = !isPublished && !service.sleutelAkkoord ? buildServiceSwitchSuggestions(service).slice(0, 4) : [];
   return `
     <article class="detail-item">
       <strong>${escapeHtml(getPersonLabel(service.persoonId))}: ${escapeHtml(service.dienstCode || formatCodeLabel(service.dienstType || "dienst"))}</strong>
       <span>${escapeHtml(formatTimeRange(service.start, service.einde))} ${service.locatie ? `- ${escapeHtml(service.locatie)}` : ""}</span>
-      <span>Ronde 2 check: ${service.sleutelAkkoord ? "klopt / geen sleutelen nodig" : "nog controleren of sleutelen"}</span>
+      <span>${isPublished ? "Gepubliceerd R4-rooster" : `Ronde 2 check: ${service.sleutelAkkoord ? "klopt / geen sleutelen nodig" : "nog controleren of sleutelen"}`}</span>
       ${getServiceTravelLabel(service) ? `<span>${escapeHtml(getServiceTravelLabel(service))}${service.reisOpmerking ? ` - ${escapeHtml(service.reisOpmerking)}` : ""}</span>` : ""}
       <span>${escapeHtml(formatCodeLabel(service.status || "status onbekend"))}</span>
       ${service.opmerking ? `<span>${escapeHtml(service.opmerking)}</span>` : ""}
@@ -1872,9 +1879,9 @@ function renderServiceDetail(service) {
         </div>
       ` : ""}
       <div class="action-buttons">
-        <button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk dienst</button>
+        ${isPublished ? "" : `<button type="button" class="tiny-button" data-edit-item="service" data-item-id="${escapeHtml(service.id)}">Bewerk dienst</button>`}
         <button type="button" class="tiny-button danger-text-button" data-delete-item="service" data-item-id="${escapeHtml(service.id)}">Verwijder dienst</button>
-        <button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">${service.sleutelAkkoord ? "Zet terug naar checken" : "Klopt, geen sleutelen nodig"}</button>
+        ${isPublished ? "" : `<button type="button" class="tiny-button" data-toggle-sleutel-service="${escapeHtml(service.id)}">${service.sleutelAkkoord ? "Zet terug naar checken" : "Klopt, geen sleutelen nodig"}</button>`}
       </div>
     </article>
   `;
@@ -3564,6 +3571,21 @@ function getServiceDurationHours(service) {
   const end = serviceDateTime(service, "end");
   if (!start || !end) return 0;
   return (end - start) / 36e5;
+}
+
+function isPublishedRosterService(service) {
+  return service?.roosterLaag === "gepubliceerd_rooster";
+}
+
+function servicesDifferForPublishedRoster(plannedService, publishedService) {
+  return normalizeServiceComparisonValue(plannedService.dienstCode) !== normalizeServiceComparisonValue(publishedService.dienstCode) ||
+    normalizeServiceComparisonValue(plannedService.start) !== normalizeServiceComparisonValue(publishedService.start) ||
+    normalizeServiceComparisonValue(plannedService.einde) !== normalizeServiceComparisonValue(publishedService.einde) ||
+    normalizeServiceComparisonValue(plannedService.locatie) !== normalizeServiceComparisonValue(publishedService.locatie);
+}
+
+function normalizeServiceComparisonValue(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function isValidTimeRange(start, end) {

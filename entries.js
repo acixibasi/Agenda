@@ -101,7 +101,7 @@ function getPlanningStageIndex(stageValue) {
 
 function buildMonthDays(month) {
   const daysInMonth = new Date(month.jaar, month.maand, 0).getDate();
-  const services = getMonthItems(month.id, "diensten");
+  const services = getVisibleServicesForMonth(month);
   const familyBlocks = getMonthItems(month.id, "gezinsVerplichtingen");
   const wishes = getMonthItems(month.id, "wensen");
   const schoolEvents = getSchoolEventsForMonth(month);
@@ -127,6 +127,12 @@ function buildMonthDays(month) {
       dutyProposals: dutyProposals.filter((item) => item.datum === date)
     };
   });
+}
+
+function getVisibleServicesForMonth(month) {
+  const services = getMonthItems(month.id, "diensten");
+  if (month.planningStage === "R4_gepubliceerd") return services;
+  return services.filter((service) => !isPublishedRosterService(service));
 }
 
 function getAiDutyProposalsForMonth(monthId) {

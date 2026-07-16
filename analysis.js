@@ -9,6 +9,7 @@ function runAnalysis(monthId) {
     ...checkCompleteness(context),
     ...checkInvalidTimes(context),
     ...checkOverlappingServicesForSamePerson(context),
+    ...checkPublishedRosterDeviation(context),
     ...checkMissingCoverage(context),
     ...checkBothParentsBusy(context),
     ...checkSoftWorktimeNotifications(context),
@@ -51,10 +52,12 @@ function restoreAnalysisState(result, statuses) {
 }
 
 function buildAnalysisContext(monthId) {
+  const services = getMonthItems(monthId, "diensten");
   return {
     monthId,
     month: getMonth(monthId),
-    services: getMonthItems(monthId, "diensten"),
+    services: services.filter((service) => !isPublishedRosterService(service)),
+    publishedServices: services.filter(isPublishedRosterService),
     familyBlocks: [
       ...getMonthItems(monthId, "gezinsVerplichtingen"),
       ...getSchoolCoverageBlocksForMonth(getMonth(monthId))
@@ -172,6 +175,55 @@ function checkOverlappingServicesForSamePerson(context) {
   });
 
   return results;
+}
+
+function checkPublishedRosterDeviation(context) {
+  const results = [];
+  if (context.month?.planningStage !== "R4_gepubliceerd") return results;
+
+  context.publishedServices.forEach((publishedService) => {
+    const plannedServices = context.services.filter((service) => {
+      return service.persoonId === publishedService.persoonId && service.datum === publishedService.datum;
+    });
+
+    if (!plannedServices.length) {
+      results.push(createAnalysisResult({
+        monthId: context.monthId,
+        datum: publishedService.datum,
+        ernst: "aandacht",
+        categorie: "gepubliceerd_rooster",
+        regelId: "controle_gepubliceerd_rooster_ontbreekt",
+        betrokkenDienstIds: [publishedService.id],
+        betrokkenGezinsVerplichtingId: "",
+        melding: `Gepubliceerd rooster bevat ${getPersonLabel(publishedService.persoonId)} ${publishedService.dienstCode || formatCodeLabel(publishedService.dienstType)} zonder R2/R3-dienst`,
+        advies: "Controleer of deze dienst nieuw is toegewezen in R4 of dat de eerdere planning ontbreekt.",
+        signature: `gepubliceerd_rooster_ontbreekt_${publishedService.id}`
+      }));
+      return;
+    }
+
+    const matchingService = plannedServices.find((service) => !servicesDifferForPublishedRoster(service, publishedService));
+    if (matchingService) return;
+
+    results.push(createAnalysisResult({
+      monthId: context.monthId,
+      datum: publishedService.datum,
+      ernst: "aandacht",
+      categorie: "gepubliceerd_rooster",
+      regelId: "controle_gepubliceerd_rooster_wijkt_af",
+      betrokkenDienstIds: [publishedService.id, ...plannedServices.map((service) => service.id)],
+      betrokkenGezinsVerplichtingId: "",
+      melding: `Gepubliceerd rooster wijkt af voor ${getPersonLabel(publishedService.persoonId)} op ${formatLongDate(publishedService.datum)}`,
+      advies: `R4: ${formatServiceForPublishedComparison(publishedService)}. Eerder: ${plannedServices.map(formatServiceForPublishedComparison).join(" / ")}.`,
+      signature: `gepubliceerd_rooster_wijkt_af_${publishedService.id}_${plannedServices.map((service) => service.id).join("_")}`
+    }));
+  });
+
+  return results;
+}
+
+function formatServiceForPublishedComparison(service) {
+  return `${service.dienstCode || formatCodeLabel(service.dienstType || "dienst")} ${formatTimeRange(service.start, service.einde)}${service.locatie ? ` ${service.locatie}` : ""}`;
 }
 
 function checkMissingCoverage(context) {

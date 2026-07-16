@@ -1197,6 +1197,11 @@ textarea {
   color: var(--attention-text);
 }
 
+.month-board-item-published {
+  background: #e0f2fe;
+  color: #075985;
+}
+
 .month-board-item-family {
   background: #f0ecff;
   color: #4c3b88;
