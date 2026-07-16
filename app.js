@@ -1604,7 +1604,7 @@ function renderDayRow(day) {
             `).join("")}
             ${day.wishes.map((wish) => `
               <span class="mini-item editable-item">
-                <span>Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>
+                <span>Wens: ${escapeHtml(formatMonthBoardWishLabel(wish))}</span>
                 ${renderItemButtons("wish", wish.id)}
               </span>
             `).join("")}
@@ -1782,9 +1782,9 @@ function formatSchoolCoverageLabel(event) {
 function renderWishDetail(wish) {
   return `
     <article class="detail-item">
-      <strong>${escapeHtml(getPersonLabel(wish.persoonId))}: ${escapeHtml(formatCodeLabel(wish.type || "Wens"))}</strong>
+      <strong>${escapeHtml(getPersonLabel(wish.persoonId))}: ${escapeHtml(formatMonthBoardWishLabel(wish))}</strong>
       <span>Prioriteit: ${escapeHtml(formatCodeLabel(wish.prioriteit || "normaal"))}</span>
-      ${wish.reden ? `<span>${escapeHtml(wish.reden)}</span>` : ""}
+      ${wish.reden ? `<span>Type: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}</span>` : ""}
       ${renderItemButtons("wish", wish.id)}
     </article>
   `;
