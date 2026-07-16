@@ -31,6 +31,7 @@ function createEmptyData() {
       evaDienstnamenIngesteld: true,
       evaDienstnamenNoordLabelIngesteld: true,
       ronaldOostDienstnamenIngesteld: true,
+      roosterIcalUrls: getDefaultRosterIcalUrls(),
       gezinsSjablonen: [],
       wensSjablonen: []
     },
@@ -87,6 +88,7 @@ function normalizeData(raw) {
   delete normalized.instellingen.herstelRegels;
   normalized.instellingen.schoolTijden = normalizeSchoolTimes(incoming.instellingen?.schoolTijden);
   normalized.instellingen.schoolIcalUrl = String(incoming.instellingen?.schoolIcalUrl || "").trim();
+  normalized.instellingen.roosterIcalUrls = normalizeRosterIcalUrls(incoming.instellingen?.roosterIcalUrls);
   normalized.kinderen = normalizeChildren(normalized.kinderen);
   normalized.contextPeriodes = normalizeContextPeriods(normalized.contextPeriodes);
   normalized.bronHistorie = Array.isArray(incoming.bronHistorie) ? incoming.bronHistorie : [];
@@ -99,6 +101,21 @@ function normalizeData(raw) {
 
 function getDefaultDutyNames() {
   return DEFAULT_DUTY_NAMES.map((dutyName) => ({ ...dutyName }));
+}
+
+function getDefaultRosterIcalUrls() {
+  return Object.keys(PERSON_LABELS).reduce((urls, personId) => {
+    urls[personId] = "";
+    return urls;
+  }, {});
+}
+
+function normalizeRosterIcalUrls(value) {
+  const incoming = value && typeof value === "object" ? value : {};
+  return Object.keys(PERSON_LABELS).reduce((urls, personId) => {
+    urls[personId] = String(incoming[personId] || "").trim();
+    return urls;
+  }, {});
 }
 
 function getDefaultContractHours() {
@@ -2709,6 +2726,12 @@ function bindEvents() {
       event.preventDefault();
       addDutyName(formToObject(event.target));
       event.target.reset();
+      return;
+    }
+
+    if (event.target.id === "roster-ical-url-form") {
+      event.preventDefault();
+      saveRosterIcalUrls(formToObject(event.target));
       return;
     }
 

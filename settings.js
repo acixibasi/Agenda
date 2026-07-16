@@ -8,6 +8,7 @@ function renderSettingsPanel() {
   const wishTemplates = getWishTemplates();
   const contractHours = getContractHours();
   const children = getChildren();
+  const rosterIcalUrls = getRosterIcalUrls();
   const schoolTimes = getSchoolTimes();
   const schoolPeriods = getSchoolPeriods();
   const editingDutyName = getEditingDutyName();
@@ -131,6 +132,30 @@ function renderSettingsPanel() {
       <div class="duty-name-list settings-duty-list">
         ${dutyRows}
       </div>
+    </section>
+
+    <section class="panel">
+      <p class="eyebrow">Gepubliceerd rooster</p>
+      <div class="storage-list">
+        ${Object.keys(PERSON_LABELS).map((personId) => `
+          <div class="storage-row">
+            <span>${escapeHtml(getPersonLabel(personId))} iCal</span>
+            <strong>${rosterIcalUrls[personId] ? "ingesteld" : "niet ingesteld"}</strong>
+          </div>
+        `).join("")}
+      </div>
+      <form id="roster-ical-url-form" class="duty-name-form settings-duty-form">
+        ${Object.keys(PERSON_LABELS).map((personId) => `
+          <label class="full-width">
+            iCal-link ${escapeHtml(getPersonLabel(personId))}
+            <input name="${escapeHtml(personId)}" type="text" value="${escapeHtml(rosterIcalUrls[personId] || "")}" placeholder="webcal://... of https://.../rooster.ics">
+          </label>
+        `).join("")}
+        <div class="form-actions full-width">
+          <button type="submit">Rooster-iCal links opslaan</button>
+        </div>
+        <p class="muted-text full-width">Deze links zijn bedoeld voor het gepubliceerde R4-rooster. Importeren naar diensten bouwen we hierna gecontroleerd, zodat bestaande keuzes niet automatisch worden overschreven.</p>
+      </form>
     </section>
 
     <section class="panel">
@@ -537,6 +562,17 @@ function getDutyNameMeta(dutyName) {
     getDutyTravelLabel(dutyName)
   ].filter(Boolean);
   return parts.join(" - ");
+}
+
+function getRosterIcalUrls() {
+  state.data.instellingen.roosterIcalUrls = normalizeRosterIcalUrls(state.data.instellingen.roosterIcalUrls);
+  return state.data.instellingen.roosterIcalUrls;
+}
+
+function saveRosterIcalUrls(input) {
+  state.data.instellingen.roosterIcalUrls = normalizeRosterIcalUrls(input);
+  saveData("rooster_ical_links_opgeslagen");
+  renderSettingsPanel();
 }
 
 function getDutyTravelLabel(dutyName) {
