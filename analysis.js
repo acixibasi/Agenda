@@ -77,8 +77,9 @@ function clearGeneratedAnalysis(monthId) {
 
 function checkCompleteness(context) {
   const results = [];
+  const isPublishedRosterStage = context.month?.planningStage === "R4_gepubliceerd";
 
-  if (!context.services.length) {
+  if (!context.services.length && !isPublishedRosterStage) {
     results.push(createAnalysisResult({
       monthId: context.monthId,
       datum: `${context.monthId}-01`,
