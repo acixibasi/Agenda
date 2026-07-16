@@ -1110,6 +1110,7 @@ function buildAdviceContextText(input) {
     "Wijzig niets automatisch. De gebruiker accepteert elke voorgestelde dienst zelf.",
     "Zet elke voorgestelde dienst exact in dit formaat op een eigen regel:",
     "DIENSTVOORSTEL: datum=JJJJ-MM-DD; persoon=Ronald of Eva; dienst=exacte dienstnaam; reden=korte reden",
+    "Gebruik geen markdown, geen tabel en geen losse Datum/Persoon/Dienst velden voor dienstvoorstellen.",
     "Zet overige opmerkingen als korte regels met OPTIE:",
     "",
     "CONTEXT:",
@@ -3110,10 +3111,10 @@ function extractAiAdviceOptions(text) {
   const cleaned = String(text || "").replace(/\r\n/g, "\n").trim();
   if (!cleaned) return [];
   const lines = cleaned.split("\n").map((line) => line.trim()).filter(Boolean);
-  const proposals = lines
-    .map(parseAiDutyProposalLine)
-    .filter(Boolean)
-    .slice(0, 20);
+  const proposals = dedupeAiDutyProposalOptions([
+    ...lines.map(parseAiDutyProposalLine).filter(Boolean),
+    ...parseAiDutyProposalBlocks(lines)
+  ]).slice(0, 20);
   const options = [];
   let current = "";
 
@@ -3143,6 +3144,17 @@ function extractAiAdviceOptions(text) {
     .map((line) => line.replace(/^[-*]\s+/, "").trim())
     .slice(0, 8)
     .map((option) => ({ tekst: option, voorstel: null }));
+}
+
+function dedupeAiDutyProposalOptions(options) {
+  const seen = new Set();
+  return options.filter((option) => {
+    const proposal = option?.voorstel || {};
+    const key = [proposal.datum, proposal.persoonId, normalizeAiText(proposal.dienstNaam || proposal.dienstCode)].join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function parseAiDutyProposalLine(line) {
@@ -3177,6 +3189,79 @@ function parseAiDutyProposalLine(line) {
     tekst: `${formatLongDate(datum)} ${getPersonLabel(personId)}: ${dienstNaam}${voorstel.reden ? ` - ${voorstel.reden}` : ""}`,
     voorstel
   };
+}
+
+function parseAiDutyProposalBlocks(lines) {
+  const proposals = [];
+  let fields = null;
+
+  const flush = () => {
+    if (!fields) return;
+    const option = buildAiDutyProposalOption(fields);
+    if (option) proposals.push(option);
+    fields = null;
+  };
+
+  lines.forEach((line) => {
+    const cleaned = stripMarkdownLabel(line);
+    if (/^dienstvoorstel\b/i.test(cleaned)) {
+      flush();
+      fields = {};
+      return;
+    }
+    if (!fields) return;
+    const separator = cleaned.indexOf(":");
+    if (separator === -1) return;
+    const key = normalizeAiText(cleaned.slice(0, separator));
+    const value = cleaned.slice(separator + 1).trim();
+    if (key && value) fields[key] = value;
+  });
+
+  flush();
+  return proposals;
+}
+
+function buildAiDutyProposalOption(fields) {
+  const datum = parseAiProposalDate(fields.datum || fields.date || "");
+  const personId = parseAiPerson(fields.persoon || fields.person || "");
+  const dienstNaam = fields.dienst || fields.dienstnaam || fields.service || "";
+  if (!datum || !personId || !dienstNaam) return null;
+
+  const voorstel = {
+    soort: "dienst",
+    datum,
+    persoonId: personId,
+    dienstNaam: dienstNaam.trim(),
+    dienstCode: dienstNaam.trim(),
+    reden: fields.reden || fields.reason || "",
+    start: "",
+    einde: "",
+    locatie: ""
+  };
+
+  return {
+    tekst: `${formatLongDate(datum)} ${getPersonLabel(personId)}: ${dienstNaam}${voorstel.reden ? ` - ${voorstel.reden}` : ""}`,
+    voorstel
+  };
+}
+
+function stripMarkdownLabel(value) {
+  return String(value || "")
+    .replace(/^[-*]\s+/, "")
+    .replace(/\*\*/g, "")
+    .trim();
+}
+
+function parseAiProposalDate(value) {
+  const raw = String(value || "").trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const numeric = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (numeric) return `${numeric[3]}-${String(numeric[2]).padStart(2, "0")}-${String(numeric[1]).padStart(2, "0")}`;
+  const longDate = raw.toLowerCase().match(/^(\d{1,2})\s+([a-zé]+)\s+(\d{4})$/i);
+  if (!longDate) return "";
+  const monthIndex = MONTH_NAMES.map((name) => name.toLowerCase()).indexOf(longDate[2]);
+  if (monthIndex === -1) return "";
+  return `${longDate[3]}-${String(monthIndex + 1).padStart(2, "0")}-${String(longDate[1]).padStart(2, "0")}`;
 }
 
 function parseAiPerson(value) {
