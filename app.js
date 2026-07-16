@@ -1692,6 +1692,8 @@ function renderCompactActionDetail(action) {
       <strong>${escapeHtml(action.titel || "Actie")}</strong>
       <span>${escapeHtml(formatCodeLabel(action.prioriteit || "normaal"))} - ${escapeHtml(formatCodeLabel(action.status || "open"))}</span>
       ${action.advies ? `<span>${escapeHtml(action.advies)}</span>` : ""}
+      ${action.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(action.afdekNotitie)}</span>` : ""}
+      ${renderActionCoverageNoteForm(action)}
       <div class="action-buttons">${renderActionButtons(action)}</div>
     </article>
   `;
@@ -1734,10 +1736,26 @@ function renderActionCard(action) {
       ${action.afdekNotitie ? `<p>Afgedekt: ${escapeHtml(action.afdekNotitie)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
       ${statusMeta}
+      ${renderActionCoverageNoteForm(action)}
       <div class="action-buttons">
         ${renderActionButtons(action)}
       </div>
     </article>
+  `;
+}
+
+function renderActionCoverageNoteForm(action) {
+  if (!action.generated || isClosedAction(action)) return "";
+  return `
+    <div class="coverage-note-form">
+      <label>
+        Afdekking zonder roosterwijziging
+        <textarea data-action-coverage-note="${escapeHtml(action.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(action.afdekNotitie || "")}</textarea>
+      </label>
+      <div class="coverage-note-actions">
+        <button type="button" class="tiny-button" data-save-action-coverage-note="${escapeHtml(action.id)}">Opslaan als afgedekt</button>
+      </div>
+    </div>
   `;
 }
 
@@ -2231,6 +2249,12 @@ function bindEvents() {
       return;
     }
 
+    const saveActionCoverageNoteButton = event.target.closest("[data-save-action-coverage-note]");
+    if (saveActionCoverageNoteButton) {
+      saveActionCoverageNote(saveActionCoverageNoteButton.dataset.saveActionCoverageNote);
+      return;
+    }
+
     const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
     if (applyFamilyTemplateButton) {
       applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
@@ -2582,6 +2606,44 @@ function saveCoverageNote(analysisId) {
   updateMonthStatus(result.maandPlanningId);
   saveData("controlepunt_afgedekt");
   renderApp();
+}
+
+function saveActionCoverageNote(actionId) {
+  const action = state.data.actieItems.find((item) => item.id === actionId);
+  const field = document.querySelector(`[data-action-coverage-note="${cssEscape(actionId)}"]`);
+  const note = String(field?.value || "").trim();
+  if (!action) return;
+  if (!note) {
+    setSaveStatus("Vul eerst in wat er geregeld is", true);
+    if (field && typeof field.focus === "function") field.focus();
+    return;
+  }
+
+  const result = findAnalysisForAction(action);
+  if (result) {
+    result.afdekNotitie = note;
+    result.afgedektOp = new Date().toISOString();
+    result.actieStatus = "afgedekt";
+    updateGeneratedActionForCoveredAnalysis(result);
+    updateMonthStatus(result.maandPlanningId);
+  } else {
+    action.status = "afgedekt";
+    action.afdekNotitie = note;
+    action.laatstBijgewerkt = new Date().toISOString();
+    updateMonthStatus(action.maandPlanningId);
+  }
+
+  saveData("actie_afgedekt");
+  renderApp();
+}
+
+function findAnalysisForAction(action) {
+  const linkedIds = Array.isArray(action.gekoppeldeAnalyseIds) ? action.gekoppeldeAnalyseIds : [];
+  return state.data.analyseResultaten.find((result) => {
+    const linkedById = linkedIds.includes(result.id);
+    const linkedBySignature = action.analyseSignature && result.signature === action.analyseSignature;
+    return linkedById || linkedBySignature;
+  }) || null;
 }
 
 function updateGeneratedActionForCoveredAnalysis(result) {
