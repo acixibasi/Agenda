@@ -471,16 +471,31 @@ function getRosterIcalSourceId(personId) {
 }
 
 function ensurePublishedRosterMonth(monthId) {
-  if (getMonth(monthId)) return;
+  const existing = getMonth(monthId);
+  if (existing) {
+    lockMonthAsPublishedRoster(existing);
+    return;
+  }
   const [year, month] = monthId.split("-").map(Number);
-  state.data.maandPlanningen.push({
+  const monthPlanning = {
     id: monthId,
     jaar: year,
     maand: month,
     planningStage: "R4_gepubliceerd",
+    planningStageLocked: true,
+    planningStageLockReason: "gepubliceerd_rooster",
     samenvattingStatus: "goed",
     aangemaaktOp: new Date().toISOString()
-  });
+  };
+  state.data.maandPlanningen.push(monthPlanning);
+  state.data.maandPlanningen.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function lockMonthAsPublishedRoster(month) {
+  month.planningStage = "R4_gepubliceerd";
+  month.planningStageLocked = true;
+  month.planningStageLockReason = "gepubliceerd_rooster";
+  month.laatstBijgewerkt = new Date().toISOString();
 }
 
 function parseIcalEvents(text) {

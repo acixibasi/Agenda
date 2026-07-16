@@ -53,6 +53,7 @@ function normalizeData(raw) {
   MODULE_1_ARRAYS.forEach((key) => {
     normalized[key] = Array.isArray(incoming[key]) ? incoming[key] : [];
   });
+  normalized.maandPlanningen = normalizeMonthPlannings(normalized.maandPlanningen);
 
   normalized.instellingen = {
     ...base.instellingen,
@@ -101,6 +102,17 @@ function normalizeData(raw) {
 
 function getDefaultDutyNames() {
   return DEFAULT_DUTY_NAMES.map((dutyName) => ({ ...dutyName }));
+}
+
+function normalizeMonthPlannings(months) {
+  return months
+    .filter((month) => month && month.id)
+    .map((month) => ({
+      ...month,
+      planningStage: PLANNING_STAGES.some((stage) => stage.value === month.planningStage) ? month.planningStage : "R1_wensen",
+      planningStageLocked: month.planningStageLocked === true || month.planningStageLocked === "true",
+      planningStageLockReason: String(month.planningStageLockReason || "").trim()
+    }));
 }
 
 function getDefaultRosterIcalUrls() {
@@ -367,6 +379,8 @@ function duplicateMonth(monthId) {
     jaar: targetYear,
     maand: targetMonth,
     samenvattingStatus: "onvolledig",
+    planningStageLocked: false,
+    planningStageLockReason: "",
     laatstBijgewerkt: new Date().toISOString()
   };
 
@@ -535,6 +549,7 @@ function renderMonthCockpit() {
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
   const nextStage = getNextPlanningStage(month.planningStage);
+  const stageLocked = isMonthStageLocked(month);
 
   content.innerHTML = `
     <div class="cockpit-header">
@@ -543,6 +558,7 @@ function renderMonthCockpit() {
         <h2 id="cockpit-title">${escapeHtml(getMonthLabel(month.id))}</h2>
         <div class="cockpit-badges">
           <span class="stage-pill">${escapeHtml(getStageLabel(month.planningStage))}</span>
+          ${stageLocked ? "<span class=\"status-pill status-goed\">R4 definitief</span>" : ""}
           <span class="status-pill status-${month.samenvattingStatus}">
             ${escapeHtml(STATUS_LABELS[month.samenvattingStatus] || month.samenvattingStatus)}
           </span>
@@ -551,10 +567,10 @@ function renderMonthCockpit() {
       <div class="toolbar">
         <button type="button" class="subtle-button" data-view-target="months">Maanden</button>
         <button type="button" data-request-ai-roster="${escapeHtml(month.id)}">AI rooster aanvullen</button>
-        ${nextStage ? `<button type="button" data-advance-month-stage="${escapeHtml(month.id)}">Zet naar ${escapeHtml(nextStage.label)}</button>` : "<button type=\"button\" class=\"subtle-button\" disabled>Laatste ronde</button>"}
+        ${stageLocked ? "<button type=\"button\" class=\"subtle-button\" disabled>R4 definitief</button>" : (nextStage ? `<button type="button" data-advance-month-stage="${escapeHtml(month.id)}">Zet naar ${escapeHtml(nextStage.label)}</button>` : "<button type=\"button\" class=\"subtle-button\" disabled>Laatste ronde</button>")}
         <label class="stage-select-label">
           Ronde
-          <select data-month-stage-select="${escapeHtml(month.id)}">
+          <select data-month-stage-select="${escapeHtml(month.id)}"${stageLocked ? " disabled" : ""}>
             ${PLANNING_STAGES.map((stage) => `<option value="${escapeHtml(stage.value)}"${selectedAttr(month.planningStage, stage.value)}>${escapeHtml(stage.label)}</option>`).join("")}
           </select>
         </label>
@@ -568,6 +584,10 @@ function renderMonthCockpit() {
       ${renderDayDetail(selectedDay)}
     </div>
   `;
+}
+
+function isMonthStageLocked(month) {
+  return Boolean(month?.planningStageLocked);
 }
 
 function buildControlSummary(month, days) {
@@ -2362,6 +2382,10 @@ function focusPendingDay() {
 
 function advanceMonthStage(monthId) {
   const month = getMonth(monthId);
+  if (isMonthStageLocked(month)) {
+    setSaveStatus("Deze maand is definitief gepubliceerd en kan niet meer van ronde wijzigen.", true);
+    return;
+  }
   const nextStage = month ? getNextPlanningStage(month.planningStage) : null;
   if (!month || !nextStage) return;
   setMonthStage(monthId, nextStage.value);
@@ -2370,6 +2394,11 @@ function advanceMonthStage(monthId) {
 function setMonthStage(monthId, stageValue) {
   const month = getMonth(monthId);
   if (!month || !PLANNING_STAGES.some((stage) => stage.value === stageValue)) return;
+  if (isMonthStageLocked(month)) {
+    setSaveStatus("Deze maand is definitief gepubliceerd en kan niet meer van ronde wijzigen.", true);
+    renderApp();
+    return;
+  }
   if (month.planningStage === stageValue) return;
   month.planningStage = stageValue;
   runAnalysis(monthId);
