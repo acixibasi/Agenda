@@ -3726,9 +3726,18 @@ function cssEscape(value) {
   return String(value).replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
 }
 
+function openHashDateIfPresent() {
+  const date = decodeURIComponent(String(window.location.hash || "").replace(/^#/, ""));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  if (!getMonth(dateToMonthId(date))) return;
+  openDay(date);
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   populateForms();
   bindEvents();
   loadData();
   renderApp();
+  openHashDateIfPresent();
+  window.addEventListener("hashchange", openHashDateIfPresent);
 });
