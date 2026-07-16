@@ -1169,6 +1169,19 @@ textarea {
   padding: 4px 5px;
 }
 
+.month-board-item-button {
+  width: 100%;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+.month-board-item-button:hover,
+.month-board-item-button:focus {
+  outline: 2px solid rgba(31, 111, 235, 0.35);
+  outline-offset: 1px;
+}
+
 .month-board-item-service {
   background: #eaf2ff;
   color: #244f8f;
@@ -1572,6 +1585,11 @@ textarea {
   display: grid;
   gap: 5px;
   padding: 10px;
+}
+
+.detail-item:focus {
+  outline: 3px solid rgba(31, 111, 235, 0.28);
+  outline-offset: 2px;
 }
 
 .detail-item-conflict,

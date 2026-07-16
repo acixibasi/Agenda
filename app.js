@@ -7,6 +7,7 @@ let state = {
   quickEntry: null,
   selectedDate: null,
   pendingFocusDate: null,
+  pendingProblemId: null,
   cockpitFilter: "all",
   editingDutyNameId: null,
   editingFamilyTemplateId: null,
@@ -1360,7 +1361,7 @@ function renderMonthBoardDay(day) {
   const proposalCount = Array.isArray(day.dutyProposals) ? day.dutyProposals.filter((proposal) => proposal.status !== "geaccepteerd").length : 0;
   const signalCount = day.analyses.length + day.actions.length + proposalCount;
   return `
-    <button type="button" class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
+    <article class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" role="button" tabindex="0" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
       <span class="month-board-day-top">
         <strong>${Number(day.date.slice(-2))}</strong>
         <span class="month-board-status" aria-hidden="true">${escapeHtml(status.icon)}</span>
@@ -1376,7 +1377,7 @@ function renderMonthBoardDay(day) {
         ${day.analyses.map(renderMonthBoardAnalysis).join("")}
         ${!itemCount && !signalCount ? "<span class=\"month-board-item month-board-item-empty\">Geen invoer</span>" : ""}
       </span>
-    </button>
+    </article>
   `;
 }
 
@@ -1432,25 +1433,25 @@ function renderMonthBoardWish(wish) {
 
 function renderMonthBoardDutyProposal(proposal) {
   return `
-    <span class="month-board-item month-board-item-proposal">
+    <button type="button" class="month-board-item month-board-item-proposal month-board-item-button" data-open-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" data-open-day="${escapeHtml(proposal.datum)}">
       AI: ${escapeHtml(getPersonLabel(proposal.persoonId))} ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "dienstvoorstel")}
-    </span>
+    </button>
   `;
 }
 
 function renderMonthBoardAction(action) {
   return `
-    <span class="month-board-item month-board-item-action">
+    <button type="button" class="month-board-item month-board-item-action month-board-item-button" data-open-problem="${escapeHtml(getActionProblemId(action))}" data-open-day="${escapeHtml(action.datum || action.deadline || "")}">
       Actie: ${escapeHtml(action.titel || "open actie")}
-    </span>
+    </button>
   `;
 }
 
 function renderMonthBoardAnalysis(result) {
   return `
-    <span class="month-board-item month-board-item-analysis signal-${escapeHtml(result.ernst)}">
+    <button type="button" class="month-board-item month-board-item-analysis month-board-item-button signal-${escapeHtml(result.ernst)}" data-open-problem="${escapeHtml(getAnalysisProblemId(result))}" data-open-day="${escapeHtml(result.datum)}">
       ${escapeHtml(formatCodeLabel(result.ernst))}: ${escapeHtml(result.melding || "controlepunt")}
-    </span>
+    </button>
   `;
 }
 
@@ -1702,7 +1703,7 @@ function renderDayDetail(day) {
 function renderDutyProposalDetail(proposal) {
   const statusLabel = getAiOptionStatusLabel(proposal.status);
   return `
-    <article class="detail-item detail-item-proposal">
+    <article class="detail-item detail-item-proposal" data-day-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" tabindex="-1">
       <strong>${escapeHtml(getPersonLabel(proposal.persoonId))}: ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "Dienstvoorstel")}</strong>
       <span>${escapeHtml(formatTimeRange(proposal.start || "", proposal.einde || ""))}${proposal.locatie ? ` - ${escapeHtml(proposal.locatie)}` : ""}</span>
       ${proposal.reden ? `<span>${escapeHtml(proposal.reden)}</span>` : ""}
@@ -1787,7 +1788,7 @@ function renderWishDetail(wish) {
 function renderAnalysisDetail(result) {
   const isCovered = result.actieStatus === "afgedekt";
   return `
-    <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")} ${isCovered ? "detail-item-covered" : ""}">
+    <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")} ${isCovered ? "detail-item-covered" : ""}" data-day-problem="${escapeHtml(getAnalysisProblemId(result))}" tabindex="-1">
       <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
       ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
       ${isCovered ? `<span>Status: afgedekt${result.afgedektOp ? ` op ${escapeHtml(formatDateTime(result.afgedektOp))}` : ""}</span>` : ""}
@@ -1799,7 +1800,7 @@ function renderAnalysisDetail(result) {
 
 function renderCompactActionDetail(action) {
   return `
-    <article class="detail-item">
+    <article class="detail-item" data-day-problem="${escapeHtml(getActionProblemId(action))}" tabindex="-1">
       <strong>${escapeHtml(action.titel || "Actie")}</strong>
       <span>${escapeHtml(formatCodeLabel(action.prioriteit || "normaal"))} - ${escapeHtml(formatCodeLabel(action.status || "open"))}</span>
       ${action.advies ? `<span>${escapeHtml(action.advies)}</span>` : ""}
@@ -1808,6 +1809,18 @@ function renderCompactActionDetail(action) {
       <div class="action-buttons">${renderActionButtons(action)}</div>
     </article>
   `;
+}
+
+function getAnalysisProblemId(result) {
+  return `analysis:${result.id}`;
+}
+
+function getActionProblemId(action) {
+  return `action:${action.id}`;
+}
+
+function getDutyProposalProblemId(proposal) {
+  return `proposal:${proposal.adviesId}:${proposal.optieIndex}`;
 }
 
 function renderItemButtons(type, id) {
@@ -2187,12 +2200,15 @@ function renderStoragePanel() {
 function focusPendingDay() {
   if (!state.pendingFocusDate || state.currentView !== "cockpit") return;
   const date = state.pendingFocusDate;
+  const problemId = state.pendingProblemId;
   state.pendingFocusDate = null;
+  state.pendingProblemId = null;
   const schedule = window.requestAnimationFrame || ((callback) => window.setTimeout(callback, 0));
   schedule(() => {
     const detail = document.querySelector(`[data-day-detail="${cssEscape(date)}"]`);
+    const problem = problemId ? document.querySelector(`[data-day-problem="${cssEscape(problemId)}"]`) : null;
     const row = document.querySelector(`[data-day-row="${cssEscape(date)}"]`);
-    const target = detail || row;
+    const target = problem || detail || row;
     if (!target) return;
     target.scrollIntoView({ behavior: "smooth", block: "start" });
     if (typeof target.focus === "function") target.focus({ preventScroll: true });
@@ -2516,6 +2532,12 @@ function bindEvents() {
       return;
     }
 
+    const openProblemButton = event.target.closest("[data-open-problem]");
+    if (openProblemButton) {
+      openDay(openProblemButton.dataset.openDay, openProblemButton.dataset.openProblem);
+      return;
+    }
+
     const openDayButton = event.target.closest("[data-open-day]");
     if (openDayButton) {
       if (event.target.closest("button, input, textarea, select, label")) return;
@@ -2665,7 +2687,7 @@ function bindEvents() {
     const openDayTarget = event.target.closest("[data-open-day]");
     if (!openDayTarget || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
-    openDay(openDayTarget.dataset.openDay);
+    openDay(openDayTarget.dataset.openDay, openDayTarget.dataset.openProblem || "");
   });
 }
 

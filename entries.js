@@ -473,7 +473,7 @@ function setCockpitFilter(filter) {
   renderMonthCockpit();
 }
 
-function openDay(date) {
+function openDay(date, problemId = "") {
   const monthId = dateToMonthId(date);
   if (!getMonth(monthId)) return;
   state.data.instellingen.actieveMaandId = monthId;
@@ -481,6 +481,7 @@ function openDay(date) {
   state.quickEntry = null;
   state.selectedDate = date;
   state.pendingFocusDate = date;
+  state.pendingProblemId = problemId;
   showView("cockpit");
 }
 
