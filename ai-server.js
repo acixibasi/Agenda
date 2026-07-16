@@ -10,7 +10,7 @@ loadEnvFile(".env");
 
 const PORT = Number(process.env.AI_SERVER_PORT || 8787);
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-4.1-mini";
 
 const MIME_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -82,8 +82,12 @@ async function handleAiAdvice(request, response) {
 
     sendJson(response, 200, { text: extractResponseText(data), model: OPENAI_MODEL });
   } catch (error) {
-    const detail = error.cause?.message || error.message || "AI-aanvraag mislukt.";
-    sendJson(response, 500, { error: detail });
+    const cause = error.cause?.message || "";
+    const detail = cause || error.message || "AI-aanvraag mislukt.";
+    const hint = /certificate|certific|UNABLE_TO_VERIFY|VERIFY_LEAF|system-ca/i.test(`${detail} ${error.cause?.code || ""}`)
+      ? " Start de server met start-ai-server.cmd of met node --use-system-ca ai-server.js."
+      : "";
+    sendJson(response, 500, { error: `${detail}${hint}` });
   }
 }
 
