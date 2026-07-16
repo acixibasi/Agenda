@@ -1414,7 +1414,22 @@ function renderControlFinding(result) {
       ${isClosedNotification ? `<span class="control-meta">Status: ${escapeHtml(formatCodeLabel(result.actieStatus))}</span>` : ""}
       ${renderLinkedServiceActions(result)}
       ${isNotification ? renderNotificationButtons(result) : ""}
+      ${!isNotification ? renderCoverageNoteForm(result) : ""}
     </article>
+  `;
+}
+
+function renderCoverageNoteForm(result) {
+  return `
+    <div class="coverage-note-form">
+      <label>
+        Afdekking zonder roosterwijziging
+        <textarea data-coverage-note="${escapeHtml(result.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(result.afdekNotitie || "")}</textarea>
+      </label>
+      <div class="coverage-note-actions">
+        <button type="button" class="tiny-button" data-save-coverage-note="${escapeHtml(result.id)}">Opslaan als afgedekt</button>
+      </div>
+    </div>
   `;
 }
 
@@ -1665,6 +1680,8 @@ function renderAnalysisDetail(result) {
     <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")}">
       <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
       ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
+      ${result.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(result.afdekNotitie)}</span>` : ""}
+      ${result.ernst !== "notificatie" ? renderCoverageNoteForm(result) : ""}
     </article>
   `;
 }
@@ -1714,6 +1731,7 @@ function renderActionCard(action) {
       <p>${escapeHtml(action.type || "actie")} - ${escapeHtml(action.prioriteit || "normaal")} - ${escapeHtml(action.status || "open")}</p>
       ${action.deadline ? `<p>Deadline: ${escapeHtml(formatLongDate(action.deadline))}</p>` : ""}
       ${action.advies ? `<p>${escapeHtml(action.advies)}</p>` : ""}
+      ${action.afdekNotitie ? `<p>Afgedekt: ${escapeHtml(action.afdekNotitie)}</p>` : ""}
       <p>${escapeHtml(getMonthLabel(action.maandPlanningId))}</p>
       ${statusMeta}
       <div class="action-buttons">
@@ -2207,6 +2225,12 @@ function bindEvents() {
       return;
     }
 
+    const saveCoverageNoteButton = event.target.closest("[data-save-coverage-note]");
+    if (saveCoverageNoteButton) {
+      saveCoverageNote(saveCoverageNoteButton.dataset.saveCoverageNote);
+      return;
+    }
+
     const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
     if (applyFamilyTemplateButton) {
       applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
@@ -2334,6 +2358,7 @@ function bindEvents() {
 
     const openDayButton = event.target.closest("[data-open-day]");
     if (openDayButton) {
+      if (event.target.closest("button, input, textarea, select, label")) return;
       openDay(openDayButton.dataset.openDay);
       return;
     }
@@ -2537,6 +2562,38 @@ function copyTextWithFallback(text) {
   const copied = document.execCommand && document.execCommand("copy");
   textarea.remove();
   setSaveStatus(copied ? "AI-context gekopieerd" : "Kopieer de AI-context handmatig", !copied);
+}
+
+function saveCoverageNote(analysisId) {
+  const result = state.data.analyseResultaten.find((item) => item.id === analysisId);
+  const field = document.querySelector(`[data-coverage-note="${cssEscape(analysisId)}"]`);
+  const note = String(field?.value || "").trim();
+  if (!result) return;
+  if (!note) {
+    setSaveStatus("Vul eerst in wat er geregeld is", true);
+    if (field && typeof field.focus === "function") field.focus();
+    return;
+  }
+
+  result.afdekNotitie = note;
+  result.afgedektOp = new Date().toISOString();
+  result.actieStatus = "afgedekt";
+  updateGeneratedActionForCoveredAnalysis(result);
+  updateMonthStatus(result.maandPlanningId);
+  saveData("controlepunt_afgedekt");
+  renderApp();
+}
+
+function updateGeneratedActionForCoveredAnalysis(result) {
+  state.data.actieItems.forEach((action) => {
+    const linkedIds = Array.isArray(action.gekoppeldeAnalyseIds) ? action.gekoppeldeAnalyseIds : [];
+    const linkedById = linkedIds.includes(result.id);
+    const linkedBySignature = action.analyseSignature && action.analyseSignature === result.signature;
+    if (!linkedById && !linkedBySignature) return;
+    action.status = "afgedekt";
+    action.afdekNotitie = result.afdekNotitie;
+    action.laatstBijgewerkt = result.afgedektOp;
+  });
 }
 
 function saveAiAdvice(monthId) {

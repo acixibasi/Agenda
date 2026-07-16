@@ -2,7 +2,7 @@
 
 function runAnalysis(monthId) {
   const context = buildAnalysisContext(monthId);
-  const preservedNotificationStatuses = getPreservedNotificationStatuses(monthId);
+  const preservedAnalysisState = getPreservedAnalysisState(monthId);
   clearGeneratedAnalysis(monthId);
 
   const results = [
@@ -14,25 +14,37 @@ function runAnalysis(monthId) {
     ...checkSoftWorktimeNotifications(context),
     ...checkMonthlyContractHours(context),
     ...checkWishConflicts(context)
-  ].map((result) => restoreNotificationStatus(result, preservedNotificationStatuses));
+  ].map((result) => restoreAnalysisState(result, preservedAnalysisState));
 
   state.data.analyseResultaten.push(...results);
   syncActionsWithAnalysis(monthId, results);
   updateMonthStatus(monthId);
 }
 
-function getPreservedNotificationStatuses(monthId) {
+function getPreservedAnalysisState(monthId) {
   return state.data.analyseResultaten.reduce((statuses, result) => {
-    if (result.maandPlanningId === monthId && result.ernst === "notificatie" && ["gezien", "bewust_akkoord"].includes(result.actieStatus)) {
-      statuses[result.signature] = result.actieStatus;
+    const preserveStatus = ["gezien", "bewust_akkoord", "afgedekt"].includes(result.actieStatus);
+    const preserveNote = String(result.afdekNotitie || "").trim();
+    if (result.maandPlanningId === monthId && result.signature && (preserveStatus || preserveNote)) {
+      statuses[result.signature] = {
+        actieStatus: preserveStatus ? result.actieStatus : "open",
+        afdekNotitie: preserveNote,
+        afgedektOp: result.afgedektOp || ""
+      };
     }
     return statuses;
   }, {});
 }
 
-function restoreNotificationStatus(result, statuses) {
-  if (result.ernst === "notificatie" && statuses[result.signature]) {
-    return { ...result, actieStatus: statuses[result.signature] };
+function restoreAnalysisState(result, statuses) {
+  const preserved = statuses[result.signature];
+  if (preserved) {
+    return {
+      ...result,
+      actieStatus: preserved.actieStatus,
+      afdekNotitie: preserved.afdekNotitie,
+      afgedektOp: preserved.afgedektOp
+    };
   }
   return result;
 }
@@ -404,6 +416,8 @@ function createAnalysisResult(input) {
     melding: input.melding,
     advies: input.advies,
     actieStatus: "open",
+    afdekNotitie: "",
+    afgedektOp: "",
     signature: input.signature,
     generated: true
   };
@@ -420,7 +434,7 @@ function syncActionsWithAnalysis(monthId, results) {
   });
 
   results
-    .filter((result) => ["conflict", "waarschuwing", "keuze_nodig", "onvolledig"].includes(result.ernst))
+    .filter((result) => ["conflict", "waarschuwing", "keuze_nodig", "onvolledig"].includes(result.ernst) && result.actieStatus !== "afgedekt")
     .forEach((result) => createOrUpdateAction(result));
 }
 
@@ -491,7 +505,7 @@ function updateNotificationStatus(analysisId, status) {
 }
 
 function updateLinkedAnalysisStatus(action, status) {
-  const mappedStatus = ["opgelost", "genegeerd"].includes(status) ? status : "open";
+  const mappedStatus = ["opgelost", "genegeerd", "afgedekt"].includes(status) ? status : "open";
   const linkedIds = Array.isArray(action.gekoppeldeAnalyseIds) ? action.gekoppeldeAnalyseIds : [];
   state.data.analyseResultaten.forEach((result) => {
     const linkedById = linkedIds.includes(result.id);

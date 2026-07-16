@@ -25,7 +25,7 @@ function getMonth(monthId) {
 function getOpenActions(monthId) {
   return state.data.actieItems.filter((action) => {
     const inMonth = !monthId || action.maandPlanningId === monthId;
-    const isOpen = !["opgelost", "genegeerd", "vervallen"].includes(action.status);
+    const isOpen = !["opgelost", "genegeerd", "vervallen", "afgedekt"].includes(action.status);
     return inMonth && isOpen;
   }).sort(sortActions);
 }
@@ -38,7 +38,7 @@ function getClosedActions(monthId) {
 }
 
 function isClosedAction(action) {
-  return ["opgelost", "genegeerd"].includes(action.status);
+  return ["opgelost", "genegeerd", "afgedekt"].includes(action.status);
 }
 
 function sortActions(a, b) {
@@ -50,7 +50,7 @@ function sortActions(a, b) {
 function getVisibleAnalyses(monthId) {
   return state.data.analyseResultaten.filter((result) => {
     const inMonth = !monthId || result.maandPlanningId === monthId;
-    return inMonth && !["vervallen", "gezien", "bewust_akkoord"].includes(result.actieStatus);
+    return inMonth && !["vervallen", "gezien", "bewust_akkoord", "afgedekt"].includes(result.actieStatus);
   });
 }
 

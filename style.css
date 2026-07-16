@@ -1301,6 +1301,30 @@ textarea {
   font-weight: 700;
 }
 
+.coverage-note-form {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.coverage-note-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.coverage-note-form textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.coverage-note-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }
@@ -1315,6 +1339,10 @@ textarea {
 
 .action-status-genegeerd {
   border-left: 4px solid #982f2f;
+}
+
+.action-status-afgedekt {
+  border-left: 4px solid var(--good-text);
 }
 
 .storage-actions {
