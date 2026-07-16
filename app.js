@@ -1938,10 +1938,15 @@ function renderFamilyDetail(block) {
     <article class="detail-item">
       <strong>${escapeHtml(formatFamilyBlockDisplayLabel(block))}</strong>
       ${block.opmerking ? `<span>Type: ${escapeHtml(formatCodeLabel(block.type || "afspraak"))}</span>` : ""}
-      <span>${block.dekkingNodig ? "Dekking nodig" : "Geen dekking nodig"} - ${escapeHtml(formatCodeLabel(block.hardheid || "onbekend"))}</span>
+      <span>${escapeHtml(formatFamilyCoverageStatus(block))} - ${escapeHtml(formatCodeLabel(block.hardheid || "onbekend"))}</span>
       ${renderItemButtons("family", block.id)}
     </article>
   `;
+}
+
+function formatFamilyCoverageStatus(block) {
+  if (typeof isCoverageProviderBlock === "function" && isCoverageProviderBlock(block)) return "Dekking geregeld";
+  return block.dekkingNodig ? "Dekking nodig" : "Geen dekking nodig";
 }
 
 function renderSchoolEventDetail(event) {

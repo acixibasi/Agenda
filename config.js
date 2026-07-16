@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.83-lokaal";
+const APP_VERSION = "0.1.84-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -118,6 +118,7 @@ const SERVICE_STATUSES = [
 
 const FAMILY_BLOCK_TYPES = [
   "opvang",
+  "oppas",
   "sport",
   "afspraak",
   "overig"

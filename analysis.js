@@ -240,7 +240,7 @@ function formatServiceForPublishedComparison(service) {
 function checkMissingCoverage(context) {
   const results = [];
   context.familyBlocks
-    .filter((block) => block.dekkingNodig)
+    .filter((block) => block.dekkingNodig && !isCoverageProviderBlock(block))
     .forEach((block) => {
       const overlappingServices = context.services.filter((service) => {
         return serviceBusyOverlapsBlock(service, block);
@@ -249,6 +249,7 @@ function checkMissingCoverage(context) {
       const bothParentsBusy = busyParents.has("persoon_jij") && busyParents.has("persoon_vrouw");
 
       if (!bothParentsBusy) return;
+      if (isCoveredByFamilyCoverage(block, context.familyBlocks)) return;
 
       const isSchoolCoverage = isSchoolCoverageBlock(block);
       const label = getCoverageBlockLabel(block);
@@ -285,12 +286,15 @@ function checkBothParentsBusy(context) {
 
         const hasCoverageConflict = context.familyBlocks.some((block) => {
           return block.dekkingNodig &&
+            !isCoverageProviderBlock(block) &&
             block.datum === date &&
+            !isCoveredByFamilyCoverage(block, context.familyBlocks) &&
             serviceBusyOverlapsBlock(jijService, block) &&
             serviceBusyOverlapsBlock(vrouwService, block);
         });
 
         if (hasCoverageConflict) return;
+        if (hasFamilyCoverageForServices(jijService, vrouwService, context.familyBlocks)) return;
 
         results.push(createAnalysisResult({
           monthId: context.monthId,
@@ -309,6 +313,39 @@ function checkBothParentsBusy(context) {
   });
 
   return results;
+}
+
+function isCoveredByFamilyCoverage(block, familyBlocks) {
+  return familyBlocks.some((candidate) => {
+    const coverageStart = blockDateTime(candidate, "start");
+    const coverageEnd = blockDateTime(candidate, "end");
+    const blockStart = blockDateTime(block, "start");
+    const blockEnd = blockDateTime(block, "end");
+    return isCoverageProviderBlock(candidate) &&
+      candidate.datum === block.datum &&
+      coverageStart &&
+      coverageEnd &&
+      blockStart &&
+      blockEnd &&
+      coverageStart <= blockStart &&
+      coverageEnd >= blockEnd;
+  });
+}
+
+function hasFamilyCoverageForServices(firstService, secondService, familyBlocks) {
+  return familyBlocks.some((block) => {
+    return isCoverageProviderBlock(block) &&
+      block.datum === firstService.datum &&
+      serviceBusyOverlapsBlock(firstService, block) &&
+      serviceBusyOverlapsBlock(secondService, block);
+  });
+}
+
+function isCoverageProviderBlock(block) {
+  const text = `${block?.type || ""} ${block?.opmerking || ""}`.toLowerCase();
+  return text.split(/[^a-z0-9]+/).filter(Boolean).some((token) => {
+    return ["oppas", "oppassen", "opvanggeregeld", "afgedekt"].includes(token);
+  }) || text.includes("past op");
 }
 
 function serviceBusyOverlapsBlock(service, block) {
