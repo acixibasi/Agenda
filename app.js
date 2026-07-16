@@ -1433,9 +1433,15 @@ function renderMonthBoardSchoolEvent(event) {
 function renderMonthBoardWish(wish) {
   return `
     <span class="month-board-item month-board-item-wish">
-      Wens: ${escapeHtml(formatCodeLabel(wish.type || "wens"))}
+      Wens: ${escapeHtml(formatMonthBoardWishLabel(wish))}
     </span>
   `;
+}
+
+function formatMonthBoardWishLabel(wish) {
+  const text = String(wish.reden || "").trim();
+  if (text) return text;
+  return formatCodeLabel(wish.type || "wens");
 }
 
 function renderMonthBoardCoveredAnalysis(result) {
