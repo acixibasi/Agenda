@@ -377,17 +377,20 @@ function importRosterIcalFile(personId, file) {
     .catch(() => window.alert("Rooster-iCal bestand kon niet worden gelezen."));
 }
 
-function importRosterIcalText(personId, text, sourceName = "rooster.ics", showAlert = true) {
+function importRosterIcalText(personId, text, sourceName = "rooster.ics", showAlert = true, importDate = new Date()) {
   const sourceId = getRosterIcalSourceId(personId);
+  const importStartDate = getRosterImportStartDate(importDate);
   const events = parseIcalEvents(text);
   const services = events
     .map((event) => mapRosterIcalEventToService(event, personId, sourceName))
+    .filter((service) => service && isAfterRosterImportDay(service, importStartDate))
     .filter(Boolean);
   const skipped = events.length - services.length;
   const affectedMonthIds = new Set(services.map((service) => service.maandPlanningId));
 
   state.data.diensten = state.data.diensten.filter((service) => {
     if (service.bronId !== sourceId || !isPublishedRosterService(service)) return true;
+    if (!isAfterRosterImportDay(service, importStartDate)) return true;
     affectedMonthIds.add(service.maandPlanningId);
     return false;
   });
@@ -404,6 +407,26 @@ function importRosterIcalText(personId, text, sourceName = "rooster.ics", showAl
     window.alert(`${services.length} gepubliceerde roosteritem(s) geimporteerd uit ${sourceName}. ${skipped} item(s) overgeslagen.`);
   }
   return { added: services.length, skipped };
+}
+
+function getRosterImportStartDate(importDate) {
+  const date = new Date(importDate);
+  if (Number.isNaN(date.getTime())) return formatLocalDateValue(new Date());
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + 1);
+  return formatLocalDateValue(date);
+}
+
+function isAfterRosterImportDay(service, importStartDate) {
+  return String(service?.datum || "") >= importStartDate;
+}
+
+function formatLocalDateValue(date) {
+  return [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0")
+  ].join("-");
 }
 
 function mapRosterIcalEventToService(event, personId, sourceName) {
