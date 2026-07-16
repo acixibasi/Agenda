@@ -1363,6 +1363,14 @@ textarea {
   gap: 6px;
 }
 
+.covered-analysis-list {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 10px;
+}
+
 .action-status-bezig {
   border-left: 4px solid var(--brand);
 }
@@ -1569,6 +1577,12 @@ textarea {
   background: var(--attention);
   border-color: #f0c36d;
   color: var(--attention-text);
+}
+
+.detail-item-covered {
+  background: var(--good);
+  border-color: #7bc995;
+  color: var(--good-text);
 }
 
 .signal-conflict,

@@ -54,6 +54,13 @@ function getVisibleAnalyses(monthId) {
   });
 }
 
+function getCoveredAnalyses(monthId) {
+  return state.data.analyseResultaten.filter((result) => {
+    const inMonth = !monthId || result.maandPlanningId === monthId;
+    return inMonth && result.actieStatus === "afgedekt";
+  });
+}
+
 function getClosedNotifications(monthId) {
   return state.data.analyseResultaten.filter((result) => {
     const inMonth = !monthId || result.maandPlanningId === monthId;
@@ -99,6 +106,7 @@ function buildMonthDays(month) {
   const wishes = getMonthItems(month.id, "wensen");
   const schoolEvents = getSchoolEventsForMonth(month);
   const analyses = getVisibleAnalyses(month.id);
+  const coveredAnalyses = getCoveredAnalyses(month.id);
   const actions = getOpenActions(month.id);
 
   return Array.from({ length: daysInMonth }, (_, index) => {
@@ -111,6 +119,7 @@ function buildMonthDays(month) {
       wishes: wishes.filter((item) => item.datum === date),
       schoolEvents: schoolEvents.filter((item) => item.date === date),
       analyses: analyses.filter((item) => item.datum === date),
+      coveredAnalyses: coveredAnalyses.filter((item) => item.datum === date),
       actions: actions.filter((item) => item.datum === date || item.deadline === date)
     };
   });

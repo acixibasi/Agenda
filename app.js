@@ -1473,15 +1473,15 @@ function renderControlFinding(result) {
 
 function renderCoverageNoteForm(result) {
   return `
-    <div class="coverage-note-form">
+    <form class="coverage-note-form" data-coverage-note-form="${escapeHtml(result.id)}">
       <label>
         Afdekking zonder roosterwijziging
         <textarea data-coverage-note="${escapeHtml(result.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(result.afdekNotitie || "")}</textarea>
       </label>
       <div class="coverage-note-actions">
-        <button type="button" class="tiny-button" data-save-coverage-note="${escapeHtml(result.id)}">Opslaan als afgedekt</button>
+        <button type="submit" class="tiny-button">Opslaan als afgedekt</button>
       </div>
-    </div>
+    </form>
   `;
 }
 
@@ -1615,6 +1615,7 @@ function renderDayDetail(day) {
   const hasSchoolEvents = day.schoolEvents.length > 0;
   const hasWishes = day.wishes.length > 0;
   const hasAnalyses = day.analyses.length > 0;
+  const hasCoveredAnalyses = Array.isArray(day.coveredAnalyses) && day.coveredAnalyses.length > 0;
   const hasActions = day.actions.length > 0;
 
   return `
@@ -1650,8 +1651,14 @@ function renderDayDetail(day) {
         </div>
         <div class="day-detail-block">
           <h4>Aandacht en acties</h4>
-          ${hasAnalyses ? day.analyses.map(renderAnalysisDetail).join("") : "<p class=\"muted-text\">Geen analysepunten.</p>"}
+          ${hasAnalyses ? day.analyses.map(renderAnalysisDetail).join("") : (!hasCoveredAnalyses ? "<p class=\"muted-text\">Geen analysepunten.</p>" : "")}
           ${hasActions ? day.actions.map(renderCompactActionDetail).join("") : "<p class=\"muted-text\">Geen open acties.</p>"}
+          ${hasCoveredAnalyses ? `
+            <div class="covered-analysis-list">
+              <strong>Afgedekt zonder roosterwijziging</strong>
+              ${day.coveredAnalyses.map(renderAnalysisDetail).join("")}
+            </div>
+          ` : ""}
         </div>
       </div>
     </section>
@@ -1728,12 +1735,14 @@ function renderWishDetail(wish) {
 }
 
 function renderAnalysisDetail(result) {
+  const isCovered = result.actieStatus === "afgedekt";
   return `
-    <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")}">
+    <article class="detail-item detail-item-${escapeHtml(result.ernst || "aandacht")} ${isCovered ? "detail-item-covered" : ""}">
       <strong>${escapeHtml(formatCodeLabel(result.ernst || "Aandacht"))}: ${escapeHtml(result.melding || "Analysepunt")}</strong>
       ${result.advies ? `<span>${escapeHtml(result.advies)}</span>` : ""}
+      ${isCovered ? `<span>Status: afgedekt${result.afgedektOp ? ` op ${escapeHtml(formatDateTime(result.afgedektOp))}` : ""}</span>` : ""}
       ${result.afdekNotitie ? `<span>Afgedekt: ${escapeHtml(result.afdekNotitie)}</span>` : ""}
-      ${result.ernst !== "notificatie" ? renderCoverageNoteForm(result) : ""}
+      ${result.ernst !== "notificatie" && !isCovered ? renderCoverageNoteForm(result) : ""}
     </article>
   `;
 }
@@ -1799,15 +1808,15 @@ function renderActionCard(action) {
 function renderActionCoverageNoteForm(action) {
   if (!action.generated || isClosedAction(action)) return "";
   return `
-    <div class="coverage-note-form">
+    <form class="coverage-note-form" data-action-coverage-note-form="${escapeHtml(action.id)}">
       <label>
         Afdekking zonder roosterwijziging
         <textarea data-action-coverage-note="${escapeHtml(action.id)}" placeholder="Bijv. buurmeisje past op van 21:00-23:00">${escapeHtml(action.afdekNotitie || "")}</textarea>
       </label>
       <div class="coverage-note-actions">
-        <button type="button" class="tiny-button" data-save-action-coverage-note="${escapeHtml(action.id)}">Opslaan als afgedekt</button>
+        <button type="submit" class="tiny-button">Opslaan als afgedekt</button>
       </div>
-    </div>
+    </form>
   `;
 }
 
@@ -2317,18 +2326,6 @@ function bindEvents() {
       return;
     }
 
-    const saveCoverageNoteButton = event.target.closest("[data-save-coverage-note]");
-    if (saveCoverageNoteButton) {
-      saveCoverageNote(saveCoverageNoteButton.dataset.saveCoverageNote);
-      return;
-    }
-
-    const saveActionCoverageNoteButton = event.target.closest("[data-save-action-coverage-note]");
-    if (saveActionCoverageNoteButton) {
-      saveActionCoverageNote(saveActionCoverageNoteButton.dataset.saveActionCoverageNote);
-      return;
-    }
-
     const applyFamilyTemplateButton = event.target.closest("[data-apply-family-template]");
     if (applyFamilyTemplateButton) {
       applyFamilyTemplate(applyFamilyTemplateButton.dataset.applyFamilyTemplate);
@@ -2482,6 +2479,18 @@ function bindEvents() {
   });
 
   document.addEventListener("submit", (event) => {
+    if (event.target.matches("[data-coverage-note-form]")) {
+      event.preventDefault();
+      saveCoverageNote(event.target.dataset.coverageNoteForm);
+      return;
+    }
+
+    if (event.target.matches("[data-action-coverage-note-form]")) {
+      event.preventDefault();
+      saveActionCoverageNote(event.target.dataset.actionCoverageNoteForm);
+      return;
+    }
+
     if (event.target.id === "contract-hours-form") {
       event.preventDefault();
       updateContractHours(formToObject(event.target));
@@ -2587,6 +2596,7 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (event.target.closest("[data-notification-status]")) return;
+    if (event.target.closest("button, input, textarea, select, label")) return;
     const openDayTarget = event.target.closest("[data-open-day]");
     if (!openDayTarget || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
