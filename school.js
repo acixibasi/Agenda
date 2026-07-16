@@ -435,6 +435,7 @@ function mapRosterIcalEventToService(event, personId, sourceName) {
   if (!start || !end) return null;
   const summary = String(event.SUMMARY || "Gepubliceerde dienst").trim();
   const dutyName = findRosterDutyNameForEvent(personId, summary, start.time, end.time);
+  const isInstructionDuty = isInstructionDutySummary(summary);
   const monthId = dateToMonthId(start.date);
   return {
     id: generateId("dienst"),
@@ -443,8 +444,8 @@ function mapRosterIcalEventToService(event, personId, sourceName) {
     datum: start.date,
     start: dutyName?.start || start.time,
     einde: dutyName?.einde || end.time,
-    dienstCode: dutyName?.naam || summary,
-    dienstType: dutyName?.dienstType || inferDutyTypeFromTime(start.time, end.time),
+    dienstCode: isInstructionDuty ? summary : dutyName?.naam || summary,
+    dienstType: isInstructionDuty ? "instructie" : dutyName?.dienstType || inferDutyTypeFromTime(start.time, end.time),
     locatie: dutyName?.locatie || dutyName?.post || String(event.LOCATION || "").trim(),
     roosterLaag: "gepubliceerd_rooster",
     status: "gepubliceerd",

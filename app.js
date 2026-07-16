@@ -54,6 +54,7 @@ function normalizeData(raw) {
     normalized[key] = Array.isArray(incoming[key]) ? incoming[key] : [];
   });
   normalized.maandPlanningen = normalizeMonthPlannings(normalized.maandPlanningen);
+  normalized.diensten = normalizeServices(normalized.diensten);
 
   normalized.instellingen = {
     ...base.instellingen,
@@ -113,6 +114,17 @@ function normalizeMonthPlannings(months) {
       planningStageLocked: month.planningStageLocked === true || month.planningStageLocked === "true",
       planningStageLockReason: String(month.planningStageLockReason || "").trim()
     }));
+}
+
+function normalizeServices(services) {
+  return services.map((service) => {
+    if (!isInstructionDutySummary(service.dienstCode)) return service;
+    return {
+      ...service,
+      dienstType: "instructie",
+      roosterLaag: service.roosterLaag === "gepubliceerd_rooster" ? "gepubliceerd_rooster" : "instructie"
+    };
+  });
 }
 
 function getDefaultRosterIcalUrls() {

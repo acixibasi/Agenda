@@ -1,6 +1,6 @@
 "use strict";
 
-const APP_VERSION = "0.1.82-lokaal";
+const APP_VERSION = "0.1.83-lokaal";
 const DATA_VERSION = 1;
 const STORAGE_KEY = "roostercoach.data.v1";
 const SETTINGS_KEY = "roostercoach.settings.v1";
@@ -57,6 +57,16 @@ const SERVICE_TYPES = [
   "instructie",
   "overig"
 ];
+
+const INSTRUCTION_DUTY_CODES = ["roc9"];
+
+function isInstructionDutySummary(value) {
+  const tokens = String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return tokens.some((token) => INSTRUCTION_DUTY_CODES.includes(token));
+}
 
 const WEEKDAY_OPTIONS = [
   { value: "1", label: "Ma" },
