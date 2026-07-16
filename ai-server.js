@@ -34,6 +34,11 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === "GET" && request.url.startsWith("/api/calendar")) {
+    await handleCalendarProxy(request, response);
+    return;
+  }
+
   if (request.method === "GET") {
     serveStatic(request, response);
     return;
@@ -45,6 +50,7 @@ const server = http.createServer(async (request, response) => {
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`Roostercoach lokaal beschikbaar op http://127.0.0.1:${PORT}/`);
   console.log("AI endpoint actief op /api/ai-advies");
+  console.log("Calendar proxy actief op /api/calendar?url=...");
 });
 
 async function handleAiAdvice(request, response) {
@@ -88,6 +94,54 @@ async function handleAiAdvice(request, response) {
       ? " Start de server met start-ai-server.cmd of met node --use-system-ca ai-server.js."
       : "";
     sendJson(response, 500, { error: `${detail}${hint}` });
+  }
+}
+
+async function handleCalendarProxy(request, response) {
+  try {
+    const url = new URL(request.url, `http://${request.headers.host || "127.0.0.1"}`);
+    const targetUrl = normalizeCalendarUrl(url.searchParams.get("url") || "");
+    if (!isAllowedCalendarUrl(targetUrl)) {
+      sendJson(response, 400, { error: "Ongeldige iCal-link." });
+      return;
+    }
+
+    const calendarResponse = await fetch(targetUrl, {
+      headers: {
+        "Accept": "text/calendar,text/plain,*/*",
+        "User-Agent": "Roostercoach-local/0.1"
+      }
+    });
+    if (!calendarResponse.ok) {
+      sendJson(response, calendarResponse.status, { error: `iCal-server gaf HTTP ${calendarResponse.status}.` });
+      return;
+    }
+
+    const text = await calendarResponse.text();
+    if (text.length > 5000000) {
+      sendJson(response, 413, { error: "iCal-bestand is te groot." });
+      return;
+    }
+
+    response.writeHead(200, { "Content-Type": "text/calendar; charset=utf-8" });
+    response.end(text);
+  } catch (error) {
+    sendJson(response, 500, { error: error.message || "iCal-link kon niet worden ingelezen." });
+  }
+}
+
+function normalizeCalendarUrl(value) {
+  const url = String(value || "").trim();
+  if (url.toLowerCase().startsWith("webcal://")) return `https://${url.slice(9)}`;
+  return url;
+}
+
+function isAllowedCalendarUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
   }
 }
 

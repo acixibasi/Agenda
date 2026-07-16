@@ -279,16 +279,10 @@ function importSchoolIcalUrl() {
     return;
   }
 
-  const fetchUrl = normalizeCalendarUrl(url);
-  const fetchCalendar = window.fetch || fetch;
-  return fetchCalendar(fetchUrl)
-    .then((response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.text();
-    })
+  return fetchCalendarText(url)
     .then((text) => importSchoolIcalText(text, url))
     .catch(() => {
-      window.alert("De iCal-link kon niet worden ingelezen. Webcal-links worden automatisch als https geprobeerd, maar vaak blokkeert de schoolserver directe browser-toegang. Download dan het .ics-bestand en gebruik iCal school importeren.");
+      window.alert("De iCal-link kon niet worden ingelezen, ook niet via de lokale proxy. Download dan het .ics-bestand en gebruik iCal school importeren.");
     });
 }
 
@@ -298,6 +292,27 @@ function normalizeCalendarUrl(url) {
     return `https://${value.slice(9)}`;
   }
   return value;
+}
+
+function fetchCalendarText(url) {
+  const directUrl = normalizeCalendarUrl(url);
+  const fetchCalendar = window.fetch || fetch;
+  return fetchCalendar(directUrl)
+    .then((response) => {
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return response.text();
+    })
+    .catch(() => fetchCalendar(getCalendarProxyUrl(url))
+      .then((response) => {
+        if (!response.ok) throw new Error(`Proxy HTTP ${response.status}`);
+        return response.text();
+      }));
+}
+
+function getCalendarProxyUrl(url) {
+  const encoded = encodeURIComponent(url);
+  if (window.location.protocol === "file:") return `http://127.0.0.1:8787/api/calendar?url=${encoded}`;
+  return `/api/calendar?url=${encoded}`;
 }
 
 function importSchoolIcalText(text, sourceName = "schoolagenda.ics") {
@@ -344,16 +359,10 @@ function importRosterIcalUrls() {
 }
 
 function importRosterIcalUrlForPerson(personId, url) {
-  const fetchUrl = normalizeCalendarUrl(url);
-  const fetchCalendar = window.fetch || fetch;
-  return fetchCalendar(fetchUrl)
-    .then((response) => {
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return response.text();
-    })
+  return fetchCalendarText(url)
     .then((text) => importRosterIcalText(personId, text, url, false))
     .catch(() => {
-      window.alert(`De rooster-iCal link van ${getPersonLabel(personId)} kon niet worden ingelezen. Download dan het .ics-bestand en gebruik de bestand-import.`);
+      window.alert(`De rooster-iCal link van ${getPersonLabel(personId)} kon niet worden ingelezen, ook niet via de lokale proxy. Download dan het .ics-bestand en gebruik de bestand-import.`);
       return { added: 0, skipped: 0 };
     });
 }
