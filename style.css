@@ -974,45 +974,6 @@ textarea {
   gap: 14px;
 }
 
-.roster-proposal-panel {
-  display: grid;
-  gap: 10px;
-}
-
-.proposal-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.roster-proposal-list {
-  display: grid;
-  gap: 8px;
-}
-
-.roster-proposal-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #eef2ff;
-  color: #312e81;
-  padding: 10px;
-}
-
-.roster-proposal-row > div:first-child {
-  display: grid;
-  gap: 4px;
-}
-
-.roster-proposal-row:focus {
-  outline: 3px solid rgba(31, 111, 235, 0.28);
-  outline-offset: 2px;
-}
-
 .month-board-panel {
   display: grid;
   gap: 12px;

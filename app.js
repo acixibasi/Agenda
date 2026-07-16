@@ -490,7 +490,6 @@ function renderMonthCockpit() {
 
   const days = buildMonthDays(month);
   const selectedDay = getSelectedDayForMonth(month, days);
-  const dutyProposals = getOpenDutyProposalsFromDays(days);
   const nextStage = getNextPlanningStage(month.planningStage);
 
   content.innerHTML = `
@@ -522,50 +521,8 @@ function renderMonthCockpit() {
 
     <div class="month-management-layout">
       ${renderMonthBoard(month, days)}
-      ${renderMonthRosterProposals(dutyProposals)}
       ${renderDayDetail(selectedDay)}
     </div>
-  `;
-}
-
-function getOpenDutyProposalsFromDays(days) {
-  return days
-    .flatMap((day) => day.dutyProposals || [])
-    .filter((proposal) => proposal.status !== "geaccepteerd")
-    .sort((a, b) => `${a.datum} ${a.persoonId} ${a.dienstNaam || ""}`.localeCompare(`${b.datum} ${b.persoonId} ${b.dienstNaam || ""}`, "nl"));
-}
-
-function renderMonthRosterProposals(proposals) {
-  if (!proposals.length) return "";
-  return `
-    <section class="panel roster-proposal-panel">
-      <div class="proposal-panel-header">
-        <div>
-          <p class="eyebrow">AI-roostervoorstellen</p>
-          <h3 class="form-section-title">${proposals.length} voorstel(len) om te accepteren</h3>
-        </div>
-        <span class="status-pill status-aandacht">Concept</span>
-      </div>
-      <div class="roster-proposal-list">
-        ${proposals.map(renderRosterProposalRow).join("")}
-      </div>
-    </section>
-  `;
-}
-
-function renderRosterProposalRow(proposal) {
-  return `
-    <article class="roster-proposal-row" data-day-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" tabindex="-1">
-      <div>
-        <strong>${escapeHtml(formatLongDate(proposal.datum))} - ${escapeHtml(getPersonLabel(proposal.persoonId))}: ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "Dienstvoorstel")}</strong>
-        ${proposal.reden ? `<span>${escapeHtml(proposal.reden)}</span>` : ""}
-      </div>
-      <div class="action-buttons">
-        <button type="button" class="tiny-button" data-accept-ai-duty="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}">Accepteer dienst</button>
-        <button type="button" class="tiny-button" data-open-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" data-open-day="${escapeHtml(proposal.datum)}">Bekijk dag</button>
-        <button type="button" class="tiny-button danger-text-button" data-ai-option-status="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}" data-ai-option-value="nagaan">Klopt niet / nagaan</button>
-      </div>
-    </article>
   `;
 }
 
@@ -1406,7 +1363,9 @@ function renderMonthBoardDay(day) {
   const isSelected = state.selectedDate === day.date;
   const schoolDeviations = getMonthBoardSchoolDeviations(day);
   const coveredAnalyses = getMonthBoardCoveredAnalyses(day);
-  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + schoolDeviations.length + coveredAnalyses.length;
+  const bestDutyProposal = getBestMonthBoardDutyProposal(day);
+  const proposalCount = bestDutyProposal ? 1 : 0;
+  const itemCount = day.services.length + day.familyBlocks.length + day.wishes.length + schoolDeviations.length + coveredAnalyses.length + proposalCount;
   const signalCount = day.analyses.length;
   return `
     <article class="month-board-day month-board-day-${status.type} ${isSelected ? "month-board-day-selected" : ""}" data-open-day="${escapeHtml(day.date)}" role="button" tabindex="0" aria-label="${escapeHtml(formatLongDate(day.date))}: ${escapeHtml(status.label)}">
@@ -1421,11 +1380,29 @@ function renderMonthBoardDay(day) {
         ${schoolDeviations.map(renderMonthBoardSchoolEvent).join("")}
         ${day.wishes.map(renderMonthBoardWish).join("")}
         ${coveredAnalyses.map(renderMonthBoardCoveredAnalysis).join("")}
+        ${bestDutyProposal ? renderMonthBoardDutyProposal(bestDutyProposal, day) : ""}
         ${day.analyses.map(renderMonthBoardAnalysis).join("")}
         ${!itemCount && !signalCount ? "<span class=\"month-board-item month-board-item-empty\">Geen invoer</span>" : ""}
       </span>
     </article>
   `;
+}
+
+function getBestMonthBoardDutyProposal(day) {
+  return getDisplayDutyProposals(day)
+    .filter((proposal) => !["nagaan", "vervallen"].includes(proposal.status || "open"))[0] || null;
+}
+
+function getDisplayDutyProposals(day) {
+  return (day.dutyProposals || [])
+    .filter((proposal) => proposal.status !== "geaccepteerd")
+    .sort(compareDutyProposalsForDisplay);
+}
+
+function compareDutyProposalsForDisplay(a, b) {
+  const adviceDateCompare = String(b.aangemaaktOp || "").localeCompare(String(a.aangemaaktOp || ""));
+  if (adviceDateCompare) return adviceDateCompare;
+  return Number(a.optieIndex || 0) - Number(b.optieIndex || 0);
 }
 
 function getDayBoardStatus(day) {
@@ -1488,6 +1465,15 @@ function renderMonthBoardWish(wish) {
     <span class="month-board-item month-board-item-wish">
       Wens: ${escapeHtml(formatMonthBoardWishLabel(wish))}
     </span>
+  `;
+}
+
+function renderMonthBoardDutyProposal(proposal, day) {
+  const otherCount = Math.max(0, getDisplayDutyProposals(day).length - 1);
+  return `
+    <button type="button" class="month-board-item month-board-item-proposal month-board-item-button" data-open-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" data-open-day="${escapeHtml(day.date)}">
+      AI: ${escapeHtml(getPersonLabel(proposal.persoonId))} ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "dienst")}${otherCount ? ` (+${otherCount})` : ""}
+    </button>
   `;
 }
 
@@ -1682,7 +1668,7 @@ function getSelectedDayForMonth(month, days) {
 
 function findFirstRelevantDay(days) {
   return days.find((day) => {
-    return day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length || day.analyses.length || day.actions.length;
+    return day.services.length || day.familyBlocks.length || day.wishes.length || day.schoolEvents.length || day.analyses.length || day.actions.length || getDisplayDutyProposals(day).length;
   }) || days[0];
 }
 
@@ -1696,7 +1682,7 @@ function renderDayDetail(day) {
   const hasCoveredAnalyses = Array.isArray(day.coveredAnalyses) && day.coveredAnalyses.length > 0;
   const hasActions = day.actions.length > 0;
   const hasClosedActions = Array.isArray(day.closedActions) && day.closedActions.length > 0;
-  const dutyProposals = (day.dutyProposals || []).filter((proposal) => proposal.status !== "geaccepteerd");
+  const dutyProposals = getDisplayDutyProposals(day);
   const hasDutyProposals = dutyProposals.length > 0;
 
   return `
