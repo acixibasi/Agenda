@@ -218,9 +218,36 @@ function normalizeWishTemplates(value) {
       vermijdTekst: String(template.vermijdTekst || "").trim(),
       magWelTekst: String(template.magWelTekst || "").trim(),
       beschrijving: String(template.beschrijving || template.opmerking || "").trim(),
+      tijdblokDagen: normalizeExplicitWeekdays(template.tijdblokDagen || template.blokDagen),
+      tijdblokStart: normalizeTimeInput(template.tijdblokStart || template.blokStart),
+      tijdblokEinde: normalizeTimeInput(template.tijdblokEinde || template.blokEinde),
       actief: template.actief !== false && template.actief !== "false"
     }))
+    .map((template) => isCompleteWishTemplateTimeBlock(template) ? template : {
+      ...template,
+      tijdblokDagen: [],
+      tijdblokStart: "",
+      tijdblokEinde: ""
+    })
     .filter((template) => template.naam);
+}
+
+function normalizeExplicitWeekdays(value) {
+  const validDays = new Set(WEEKDAY_OPTIONS.map((day) => day.value));
+  const source = Array.isArray(value) ? value : (value ? [value] : []);
+  return [...new Set(source.map(String).filter((day) => validDays.has(day)))];
+}
+
+function normalizeTimeInput(value) {
+  const text = String(value || "").trim();
+  return /^\d{2}:\d{2}$/.test(text) && timeToMinutes(text) !== null ? text : "";
+}
+
+function isCompleteWishTemplateTimeBlock(template) {
+  return template.tijdblokDagen.length > 0 &&
+    Boolean(template.tijdblokStart) &&
+    Boolean(template.tijdblokEinde) &&
+    template.tijdblokStart !== template.tijdblokEinde;
 }
 
 function legacyRecoveryRulesToWishTemplates(value) {
@@ -1238,6 +1265,7 @@ function formatWishTemplateForContext(template) {
     template.kernzin ? `kern: ${template.kernzin}` : "",
     template.voorWieTekst ? `voor wie: ${template.voorWieTekst}` : "",
     template.wanneerTekst ? `wanneer: ${template.wanneerTekst}` : "",
+    isCompleteWishTemplateTimeBlock(template) ? `tijdblok: ${getDutyWeekdayLabel(template.tijdblokDagen)} ${formatTimeRange(template.tijdblokStart, template.tijdblokEinde)}` : "",
     template.vermijdTekst ? `vermijd: ${template.vermijdTekst}` : "",
     template.magWelTekst ? `mag wel: ${template.magWelTekst}` : "",
     template.beschrijving ? `toelichting: ${template.beschrijving}` : ""
@@ -1271,6 +1299,7 @@ function renderWishTemplateContextItem(template) {
       <strong>${escapeHtml(template.naam)}</strong>
       ${template.kernzin ? `<span>${escapeHtml(template.kernzin)}</span>` : ""}
       ${template.voorWieTekst || template.wanneerTekst ? `<span>${escapeHtml([template.voorWieTekst, template.wanneerTekst].filter(Boolean).join(" - "))}</span>` : ""}
+      ${isCompleteWishTemplateTimeBlock(template) ? `<span>Tijdblok: ${escapeHtml(getDutyWeekdayLabel(template.tijdblokDagen))} ${escapeHtml(formatTimeRange(template.tijdblokStart, template.tijdblokEinde))}</span>` : ""}
       ${template.vermijdTekst ? `<span>Vermijd: ${escapeHtml(template.vermijdTekst)}</span>` : ""}
       ${template.magWelTekst ? `<span>Mag wel: ${escapeHtml(template.magWelTekst)}</span>` : ""}
       ${template.beschrijving ? `<span>${escapeHtml(template.beschrijving)}</span>` : ""}
@@ -1390,7 +1419,8 @@ function renderMonthBoardDay(day) {
 
 function getBestMonthBoardDutyProposal(day) {
   return getDisplayDutyProposals(day)
-    .filter((proposal) => !["nagaan", "vervallen"].includes(proposal.status || "open"))[0] || null;
+    .filter((proposal) => !["nagaan", "vervallen"].includes(proposal.status || "open"))
+    .filter((proposal) => !getStructuredWishTemplateConflictsForDutyProposal(proposal).length)[0] || null;
 }
 
 function getDisplayDutyProposals(day) {
@@ -1403,6 +1433,52 @@ function compareDutyProposalsForDisplay(a, b) {
   const adviceDateCompare = String(b.aangemaaktOp || "").localeCompare(String(a.aangemaaktOp || ""));
   if (adviceDateCompare) return adviceDateCompare;
   return Number(a.optieIndex || 0) - Number(b.optieIndex || 0);
+}
+
+function getStructuredWishTemplateConflictsForDutyProposal(proposal) {
+  const monthId = getAiAdviceById(proposal.adviesId)?.maandPlanningId || dateToMonthId(proposal.datum);
+  const dutyName = findDutyNameForAiProposal(proposal, monthId);
+  const service = {
+    datum: proposal.datum,
+    persoonId: proposal.persoonId,
+    dienstType: dutyName?.dienstType || proposal.dienstType || "dienst",
+    start: dutyName?.start || proposal.start || "",
+    einde: dutyName?.einde || proposal.einde || ""
+  };
+  return getStructuredWishTemplateConflictsForService(service);
+}
+
+function getStructuredWishTemplateConflictsForService(service) {
+  return getWishTemplates().filter((template) => {
+    if (!template.actief || !isCompleteWishTemplateTimeBlock(template)) return false;
+    if (!wishTemplateAppliesToPerson(template, service.persoonId)) return false;
+    if (!wishTemplateAppliesOnDate(template, service.datum)) return false;
+    return serviceOverlapsWishTemplateTimeBlock(service, template);
+  });
+}
+
+function wishTemplateAppliesToPerson(template, personId) {
+  if (template.scope === "beiden" || template.scope === "gezin") return true;
+  if (template.scope === personId) return true;
+  const text = normalizeAiText(`${template.voorWieTekst || ""} ${template.naam || ""} ${template.kernzin || ""}`);
+  if (personId === "persoon_vrouw") return text.includes("eva") || text.includes("vrouw");
+  if (personId === "persoon_jij") return text.includes("ronald") || text.includes("jij") || text.includes("ik");
+  return false;
+}
+
+function wishTemplateAppliesOnDate(template, dateValue) {
+  const date = new Date(`${dateValue}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return false;
+  return template.tijdblokDagen.includes(String(date.getDay()));
+}
+
+function serviceOverlapsWishTemplateTimeBlock(service, template) {
+  return dateWindowsOverlap(
+    serviceDateTime(service, "start"),
+    serviceDateTime(service, "end"),
+    blockDateTime({ datum: service.datum, start: template.tijdblokStart, einde: template.tijdblokEinde }, "start"),
+    blockDateTime({ datum: service.datum, start: template.tijdblokStart, einde: template.tijdblokEinde }, "end")
+  );
 }
 
 function getDayBoardStatus(day) {
@@ -1746,11 +1822,13 @@ function renderDayDetail(day) {
 
 function renderDutyProposalDetail(proposal) {
   const statusLabel = getAiOptionStatusLabel(proposal.status);
+  const wishConflicts = getStructuredWishTemplateConflictsForDutyProposal(proposal);
   return `
     <article class="detail-item detail-item-proposal" data-day-problem="${escapeHtml(getDutyProposalProblemId(proposal))}" tabindex="-1">
       <strong>${escapeHtml(getPersonLabel(proposal.persoonId))}: ${escapeHtml(proposal.dienstNaam || proposal.dienstCode || "Dienstvoorstel")}</strong>
       <span>${escapeHtml(formatTimeRange(proposal.start || "", proposal.einde || ""))}${proposal.locatie ? ` - ${escapeHtml(proposal.locatie)}` : ""}</span>
       ${proposal.reden ? `<span>${escapeHtml(proposal.reden)}</span>` : ""}
+      ${wishConflicts.length ? `<span>Let op: botst met wenssjabloon ${escapeHtml(wishConflicts.map((template) => template.naam).join(", "))}</span>` : ""}
       ${proposal.status && proposal.status !== "open" ? `<span>Status: ${escapeHtml(statusLabel)}</span>` : ""}
       <div class="action-buttons">
         <button type="button" class="tiny-button" data-accept-ai-duty="${escapeHtml(proposal.adviesId)}" data-ai-option-index="${proposal.optieIndex}">Accepteer dienst</button>
@@ -3058,6 +3136,12 @@ function acceptAiDutyProposal(adviceId, optionIndex) {
     renderApp();
     setSaveStatus("Dienstvoorstel matcht geen beheerde dienstnaam voor deze dag/ronde", true);
     return;
+  }
+
+  const wishConflicts = getStructuredWishTemplateConflictsForDutyProposal({ ...proposal, adviesId: advice.id });
+  if (wishConflicts.length) {
+    const ok = window.confirm(`Dit voorstel botst met wenssjabloon: ${wishConflicts.map((template) => template.naam).join(", ")}.\n\nToch accepteren?`);
+    if (!ok) return;
   }
 
   const duplicate = state.data.diensten.find((service) => {

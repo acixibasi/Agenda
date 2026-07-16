@@ -13,7 +13,8 @@ function runAnalysis(monthId) {
     ...checkBothParentsBusy(context),
     ...checkSoftWorktimeNotifications(context),
     ...checkMonthlyContractHours(context),
-    ...checkWishConflicts(context)
+    ...checkWishConflicts(context),
+    ...checkWishTemplateTimeBlockConflicts(context)
   ].map((result) => restoreAnalysisState(result, preservedAnalysisState));
 
   state.data.analyseResultaten.push(...results);
@@ -59,6 +60,7 @@ function buildAnalysisContext(monthId) {
       ...getSchoolCoverageBlocksForMonth(getMonth(monthId))
     ],
     wishes: getMonthItems(monthId, "wensen"),
+    wishTemplates: getWishTemplates().filter((template) => template.actief),
     analyses: getMonthItems(monthId, "analyseResultaten"),
     actions: getMonthItems(monthId, "actieItems")
   };
@@ -388,6 +390,33 @@ function checkWishConflicts(context) {
         signature: `wens_botst_${wish.id}_${services.map((service) => service.id).join("_")}`
       }));
     });
+
+  return results;
+}
+
+function checkWishTemplateTimeBlockConflicts(context) {
+  const results = [];
+
+  context.services.forEach((service) => {
+    const conflicts = getStructuredWishTemplateConflictsForService(service)
+      .filter((template) => context.wishTemplates.some((activeTemplate) => activeTemplate.id === template.id));
+    if (!conflicts.length) return;
+
+    conflicts.forEach((template) => {
+      results.push(createAnalysisResult({
+        monthId: context.monthId,
+        datum: service.datum,
+        ernst: template.hardheid === "hard" ? "aandacht" : "notificatie",
+        categorie: "wens",
+        regelId: "notificatie_wenssjabloon_tijdblok",
+        betrokkenDienstIds: [service.id],
+        betrokkenGezinsVerplichtingId: "",
+        melding: `${getPersonLabel(service.persoonId)} werkt binnen wens-tijdblok ${template.naam}`,
+        advies: "Controleer of deze wens bewust vervalt of dat de dienst aangepast moet worden.",
+        signature: `wenssjabloon_tijdblok_${template.id}_${service.id}`
+      }));
+    });
+  });
 
   return results;
 }

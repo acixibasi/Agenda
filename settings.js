@@ -419,11 +419,11 @@ function renderSettingsFamilyTemplateForm(editingTemplate = null) {
   `;
 }
 
-function renderWeekdayCheckboxes(selectedDays = null) {
-  const selected = new Set(normalizeDutyWeekdays(selectedDays));
+function renderWeekdayCheckboxes(selectedDays = null, inputName = "beschikbareDagen", defaultAll = true) {
+  const selected = new Set(defaultAll ? normalizeDutyWeekdays(selectedDays) : normalizeExplicitWeekdays(selectedDays));
   return WEEKDAY_OPTIONS.map((day) => `
     <label class="checkbox-label">
-      <input name="beschikbareDagen" type="checkbox" value="${escapeHtml(day.value)}"${selected.has(day.value) ? " checked" : ""}>
+      <input name="${escapeHtml(inputName)}" type="checkbox" value="${escapeHtml(day.value)}"${selected.has(day.value) ? " checked" : ""}>
       ${escapeHtml(day.label)}
     </label>
   `).join("");
@@ -473,6 +473,22 @@ function renderSettingsWishTemplateForm(editingTemplate = null) {
         Wanneer speelt dit?
         <textarea name="wanneerTekst" placeholder="Bijv. weekend waarin Marjolein bij ons is, na een nachtdienst, schooldagen, vrijdagavond">${escapeHtml(template.wanneerTekst || WISH_TEMPLATE_TIMING[template.timing] || "")}</textarea>
       </label>
+      <fieldset class="full-width">
+        <legend>Tijdblok</legend>
+        <div class="weekday-grid">
+          ${renderWeekdayCheckboxes(template.tijdblokDagen, "tijdblokDagen", false)}
+        </div>
+        <div class="form-grid-compact">
+          <label>
+            Start
+            <input name="tijdblokStart" type="time" value="${escapeHtml(template.tijdblokStart || "")}">
+          </label>
+          <label>
+            Einde
+            <input name="tijdblokEinde" type="time" value="${escapeHtml(template.tijdblokEinde || "")}">
+          </label>
+        </div>
+      </fieldset>
       <label class="full-width">
         Wat moet vermeden worden?
         <textarea name="vermijdTekst" placeholder="Bijv. diensten tijdens haar verblijf, vroege dienst na late dienst, spitsdiensten">${escapeHtml(template.vermijdTekst || "")}</textarea>
@@ -498,8 +514,14 @@ function getWishTemplateMeta(template) {
     WISH_TEMPLATE_STRENGTH[template.hardheid] || formatCodeLabel(template.hardheid),
     template.voorWieTekst || WISH_TEMPLATE_SCOPE[template.scope] || "",
     template.wanneerTekst || WISH_TEMPLATE_TIMING[template.timing] || "",
+    getWishTemplateTimeBlockLabel(template),
     template.actief ? "actief" : "uit"
   ].filter(Boolean).join(" - ");
+}
+
+function getWishTemplateTimeBlockLabel(template) {
+  if (!isCompleteWishTemplateTimeBlock(template)) return "";
+  return `${getDutyWeekdayLabel(template.tijdblokDagen)} ${formatTimeRange(template.tijdblokStart, template.tijdblokEinde)}`;
 }
 
 function getDutyNameMeta(dutyName) {
@@ -710,8 +732,16 @@ function addWishTemplate(input) {
     vermijdTekst: String(input.vermijdTekst || "").trim(),
     magWelTekst: String(input.magWelTekst || "").trim(),
     beschrijving: String(input.beschrijving || "").trim(),
+    tijdblokDagen: normalizeExplicitWeekdays(getFormArrayValue(input.tijdblokDagen)),
+    tijdblokStart: normalizeTimeInput(input.tijdblokStart),
+    tijdblokEinde: normalizeTimeInput(input.tijdblokEinde),
     actief: input.actief !== "false"
   };
+  if (!isCompleteWishTemplateTimeBlock(template)) {
+    template.tijdblokDagen = [];
+    template.tijdblokStart = "";
+    template.tijdblokEinde = "";
+  }
 
   if (!template.naam || !template.kernzin) return;
 
@@ -756,7 +786,10 @@ function getWishTemplateKey(template) {
     String(template.naam || "").trim().toLowerCase(),
     String(template.kernzin || "").trim().toLowerCase(),
     String(template.voorWieTekst || "").trim().toLowerCase(),
-    String(template.wanneerTekst || "").trim().toLowerCase()
+    String(template.wanneerTekst || "").trim().toLowerCase(),
+    normalizeExplicitWeekdays(template.tijdblokDagen).join(","),
+    String(template.tijdblokStart || ""),
+    String(template.tijdblokEinde || "")
   ].join("|");
 }
 
