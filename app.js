@@ -643,6 +643,7 @@ function getHardAdviceLabel(summary) {
 }
 
 function renderControlCenter(summary) {
+  const openAttentionCount = summary.conflicts.length + summary.checks.length;
   return `
     <section class="panel control-center control-${escapeHtml(summary.month.samenvattingStatus)}">
       <div class="control-header">
@@ -653,6 +654,9 @@ function renderControlCenter(summary) {
         </div>
         <div class="toolbar">
           <button type="button" data-run-analysis="${escapeHtml(summary.month.id)}">Controle opnieuw uitvoeren</button>
+          <a class="button-link ${openAttentionCount ? "button-link-alert" : ""}" href="notificaties/index.html">
+            Open aandachtspunten (${openAttentionCount})
+          </a>
         </div>
       </div>
 

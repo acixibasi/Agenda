@@ -52,6 +52,33 @@ button:hover {
   background: var(--brand-dark);
 }
 
+.button-link {
+  min-height: 42px;
+  border: 1px solid var(--brand);
+  border-radius: 6px;
+  background: var(--brand);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--brand-dark);
+}
+
+.button-link-alert {
+  border-color: var(--conflict-text);
+  background: var(--conflict-text);
+}
+
+.button-link-alert:hover {
+  background: #7f1515;
+}
+
 .app-shell {
   width: min(1440px, 100%);
   margin: 0 auto;
