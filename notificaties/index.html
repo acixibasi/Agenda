@@ -302,7 +302,7 @@
         <select id="severity-filter">
           <option value="all">Alles</option>
           <option value="conflict">Conflicten</option>
-          <option value="aandacht">Aandacht</option>
+          <option value="attention">Aandacht</option>
         </select>
       </label>
       <label>
@@ -329,7 +329,8 @@
 
     const STORAGE_KEY = "roostercoach.data.v1";
     const OPEN_STATUSES = new Set(["", "open", undefined, null]);
-    const ACTIVE_SEVERITIES = new Set(["conflict", "aandacht"]);
+    const ATTENTION_SEVERITIES = new Set(["aandacht", "waarschuwing", "keuze_nodig"]);
+    const ACTIVE_SEVERITIES = new Set(["conflict", ...ATTENTION_SEVERITIES]);
     const MONTH_NAMES = [
       "januari", "februari", "maart", "april", "mei", "juni",
       "juli", "augustus", "september", "oktober", "november", "december"
@@ -396,7 +397,7 @@
       renderMonthOptions();
       const filtered = getFilteredItems();
       const conflicts = filtered.filter((item) => item.ernst === "conflict").length;
-      const attention = filtered.filter((item) => item.ernst === "aandacht").length;
+      const attention = filtered.filter((item) => ATTENTION_SEVERITIES.has(item.ernst)).length;
 
       elements.metricTotal.textContent = String(filtered.length);
       elements.metricConflicts.textContent = String(conflicts);
@@ -435,7 +436,9 @@
       const noteValue = elements.noteFilter.value || "all";
       return currentItems.filter((item) => {
         const monthMatches = monthValue === "all" || getMonthId(item) === monthValue;
-        const severityMatches = severityValue === "all" || item.ernst === severityValue;
+        const severityMatches = severityValue === "all" ||
+          item.ernst === severityValue ||
+          (severityValue === "attention" && ATTENTION_SEVERITIES.has(item.ernst));
         const hasNote = Boolean(String(item.afdekNotitie || "").trim());
         const noteMatches = noteValue === "all" ||
           (noteValue === "with-note" && hasNote) ||
@@ -449,10 +452,11 @@
       const hasNote = note.trim().length > 0;
       const dateLabel = item.datum ? formatLongDate(item.datum) : formatMonthLabel(item.maandPlanningId || "");
       const severityLabel = item.ernst === "conflict" ? "Conflict" : "Aandacht";
+      const severityClass = item.ernst === "conflict" ? "conflict" : "aandacht";
       return `
-        <article class="notice-card" data-id="${escapeHtml(item.id)}" data-severity="${escapeHtml(item.ernst)}">
+        <article class="notice-card" data-id="${escapeHtml(item.id)}" data-severity="${escapeHtml(severityClass)}">
           <button type="button" class="notice-head" data-toggle="${escapeHtml(item.id)}">
-            <span class="pill pill-${escapeHtml(item.ernst)}">${escapeHtml(severityLabel)}</span>
+            <span class="pill pill-${escapeHtml(severityClass)}">${escapeHtml(severityLabel)}</span>
             <span class="notice-title">
               <strong>${escapeHtml(item.melding || "Analysepunt")}</strong>
               <span class="muted">${escapeHtml(dateLabel)} - ${escapeHtml(formatCodeLabel(item.categorie || "algemeen"))}</span>
